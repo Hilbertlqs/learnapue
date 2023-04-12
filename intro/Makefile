@@ -3,7 +3,7 @@ PLATFORM=$(shell $(ROOT)/systype.sh)
 include $(ROOT)/Make.defines.$(PLATFORM)
 
 OUTPUT_DIR = $(ROOT)/build/intro
-PROGS = getcputc hello ls1 mycat
+PROGS = getcputc hello ls1 mycat shell1
 
 all: $(OUTPUT_DIR) $(PROGS)
 
