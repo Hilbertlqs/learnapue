@@ -3,7 +3,7 @@ PLATFORM=$(shell $(ROOT)/systype.sh)
 include $(ROOT)/Make.defines.$(PLATFORM)
 
 OUTPUT_DIR = $(ROOT)/build/intro
-PROGS = ls1
+PROGS = ls1 mycat
 
 all: $(OUTPUT_DIR) $(PROGS)
 
