@@ -3,7 +3,7 @@ PLATFORM=$(shell $(ROOT)/systype.sh)
 include $(ROOT)/Make.defines.$(PLATFORM)
 
 OUTPUT_DIR = $(ROOT)/build/intro
-PROGS = getcputc hello ls1 mycat shell1 testerror uidgid
+PROGS = getcputc hello ls1 mycat shell1 shell2 testerror uidgid
 
 all: $(OUTPUT_DIR) $(PROGS)
 
