@@ -1,2 +1,160 @@
 Type in the apue3e code mostly with Linux kernel coding style.
 Just for the purpose of learning advanced programming in the Linux environment.
+
+apue.3e make
+download source code from www.apuebook.com
+ubuntu 20.04 lts
+visual studio code
+file - open folder -> apue.3e
+file - save workspace as -> apue.3e.code-workspace
+terminal - new terminal -> 
+make clean
+make
+[
+making filedir
+make[1]: Entering directory '/home/lqs/apue3e/apue.3e/filedir'
+gcc -ansi -I../include -Wall -DLINUX -D_GNU_SOURCE  access.c -o access  -L../lib -lapue 
+gcc -ansi -I../include -Wall -DLINUX -D_GNU_SOURCE  cdpwd.c -o cdpwd  -L../lib -lapue 
+gcc -ansi -I../include -Wall -DLINUX -D_GNU_SOURCE  changemod.c -o changemod  -L../lib -lapue 
+gcc -ansi -I../include -Wall -DLINUX -D_GNU_SOURCE  devrdev.c -o devrdev  -L../lib -lapue 
+devrdev.c: In function ‘main’:
+devrdev.c:19:25: warning: implicit declaration of function ‘major’ [-Wimplicit-function-declaration]
+   19 |   printf("dev = %d/%d", major(buf.st_dev),  minor(buf.st_dev));
+      |                         ^~~~~
+devrdev.c:19:45: warning: implicit declaration of function ‘minor’ [-Wimplicit-function-declaration]
+   19 |   printf("dev = %d/%d", major(buf.st_dev),  minor(buf.st_dev));
+      |                                             ^~~~~
+/usr/bin/ld: /tmp/ccxOdhhq.o: in function `main':
+devrdev.c:(.text+0xc5): undefined reference to `minor'
+/usr/bin/ld: devrdev.c:(.text+0xdb): undefined reference to `major'
+/usr/bin/ld: devrdev.c:(.text+0x128): undefined reference to `minor'
+/usr/bin/ld: devrdev.c:(.text+0x13e): undefined reference to `major'
+collect2: error: ld returned 1 exit status
+make[1]: *** [Makefile:18: devrdev] Error 1
+make[1]: Leaving directory '/home/lqs/apue3e/apue.3e/filedir'
+make: *** [Makefile:6: all] Error 1
+apue.3e/include/apue.h:
+mv apue.h apue.h.org
+cp apue.h.org apue.h
+#include <sys/types.h>
+->
+#include <sys/types.h>
+#include <sys/sysmacros.h>
+
+making stdio
+make[1]: Entering directory '/home/lqs/apue3e/apue.3e/stdio'
+gcc -ansi -I../include -Wall -DLINUX -D_GNU_SOURCE  buf.c -o buf  -L../lib -lapue 
+buf.c: In function ‘is_unbuffered’:
+buf.c:90:15: error: ‘FILE’ {aka ‘struct _IO_FILE’} has no member named ‘__pad’; did you mean ‘__pad5’?
+   90 | #define _flag __pad[4]
+      |               ^~~~~
+buf.c:98:13: note: in expansion of macro ‘_flag’
+   98 |  return(fp->_flag & _IONBF);
+      |             ^~~~~
+buf.c: In function ‘is_linebuffered’:
+buf.c:90:15: error: ‘FILE’ {aka ‘struct _IO_FILE’} has no member named ‘__pad’; did you mean ‘__pad5’?
+   90 | #define _flag __pad[4]
+      |               ^~~~~
+buf.c:104:13: note: in expansion of macro ‘_flag’
+  104 |  return(fp->_flag & _IOLBF);
+      |             ^~~~~
+buf.c: In function ‘buffer_size’:
+buf.c:92:15: error: ‘FILE’ {aka ‘struct _IO_FILE’} has no member named ‘__pad’; did you mean ‘__pad5’?
+   92 | #define _base __pad[2]
+      |               ^~~~~
+buf.c:111:13: note: in expansion of macro ‘_base’
+  111 |  return(fp->_base - fp->_ptr);
+      |             ^~~~~
+buf.c:91:14: error: ‘FILE’ {aka ‘struct _IO_FILE’} has no member named ‘__pad’; did you mean ‘__pad5’?
+   91 | #define _ptr __pad[1]
+      |              ^~~~~
+buf.c:111:25: note: in expansion of macro ‘_ptr’
+  111 |  return(fp->_base - fp->_ptr);
+      |                         ^~~~
+buf.c: In function ‘is_unbuffered’:
+buf.c:99:1: warning: control reaches end of non-void function [-Wreturn-type]
+   99 | }
+      | ^
+buf.c: In function ‘is_linebuffered’:
+buf.c:105:1: warning: control reaches end of non-void function [-Wreturn-type]
+  105 | }
+      | ^
+buf.c: In function ‘buffer_size’:
+buf.c:115:1: warning: control reaches end of non-void function [-Wreturn-type]
+  115 | }
+      | ^
+make[1]: *** [Makefile:16: buf] Error 1
+make[1]: Leaving directory '/home/lqs/apue3e/apue.3e/stdio'
+make: *** [Makefile:6: all] Error 1
+apue.3e/stdio/buf.c:
+mv buf.c buf.c.org
+cp buf.c.org buf.c
+
+#ifdef _LP64
+#define _flag __pad[4]
+#define _ptr __pad[1]
+#define _base __pad[2]
+#endif
+
+int
+is_unbuffered(FILE *fp)
+{
+	return(fp->_flag & _IONBF);
+}
+
+int
+is_linebuffered(FILE *fp)
+{
+	return(fp->_flag & _IOLBF);
+}
+
+int
+buffer_size(FILE *fp)
+{
+#ifdef _LP64
+	return(fp->_base - fp->_ptr);
+#else
+	return(BUFSIZ);	/* just a guess */
+#endif
+}
+->
+/*
+#ifdef _LP64
+#define _flag __pad[4]
+#define _ptr __pad[1]
+#define _base __pad[2]
+#endif
+*/
+int
+is_unbuffered(FILE *fp)
+{
+	return(fp->_flags & _IONBF);
+}
+
+int
+is_linebuffered(FILE *fp)
+{
+	return(fp->_flags & _IOLBF);
+}
+
+int
+buffer_size(FILE *fp)
+{
+#ifdef _LP64
+	return(fp->_IO_buf_end - fp->_IO_buf_base);
+#else
+	return(BUFSIZ);	/* just a guess */
+#endif
+}
+making threads
+make[1]: Entering directory '/home/lqs/apue3e/apue.3e/threads'
+gcc -ansi -I../include -Wall -DLINUX -D_GNU_SOURCE  badexit2.c -o badexit2  -L../lib -lapue -pthread -lrt -lbsd
+/usr/bin/ld: cannot find -lbsd
+collect2: error: ld returned 1 exit status
+make[1]: *** [Makefile:31: badexit2] Error 1
+make[1]: Leaving directory '/home/lqs/apue3e/apue.3e/threads'
+make: *** [Makefile:6: all] Error 1
+sudo apt-get install libbsd-dev
+]
+make clean
+make
