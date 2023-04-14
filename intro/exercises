@@ -1,0 +1,23 @@
+1.1
+ls commond
+       -d, --directory
+              list directories themselves, not their contents
+       -i, --inode
+              print the index number of each file
+       -l     use a long listing format
+$ ls -ldi /etc/. /etc/..
+2097153 drwxr-xr-x 132 root root 12288 4月  12 08:30 /etc/.
+      2 drwxr-xr-x  20 root root  4096 11月  3 14:11 /etc/..
+$ ls -ldi /. /..
+2 drwxr-xr-x 20 root root 4096 11月  3 14:11 /.
+2 drwxr-xr-x 20 root root 4096 11月  3 14:11 /..
+1.2
+在UNIX系统中，创建一个新的进程时，内核顺序分配pid。在第一次执行程序和第二次执行程序之间，系统创建了pid为852和853的两个进程。在第二次执行程序时，这两个进程可能仍在运行，也可能已经结束。总之，在这个时间窗口内，曾有两个进程占用了852和853这两个pid。
+1.3
+perror的msg参数是一个指针，perror就可以改变msg指向的字符串，使用限定符const限制perror不能修改msg指针指向的字符串。对于strerror，错误号参数是整数类型，C按值传递所有参数，即使strerror函数想修改参数的值也修改不了，必要使用const属性。
+1.4
+32位带符号整型数范围是-2147483648~2147483647，一年按365天计算，2147483647 / 60 / 60 / 24 / 365 ~= 68.096年，考虑闰年，也不会早于68年，1970 + 68 = 2038年。
+将time_t定义为64位整型。
+“如果它现在是32位整型，那么为使应用程序正常工作，应当对其重编译。但是这一问题还有更糟糕之处。某些文件系统及备份介质以32位整型存放时间。对于这些同样需要加以更新，但又需要能读旧的格式。”
+1.5
+2147483647 / 100 / 60 / 60 / 24 ~= 248.551
