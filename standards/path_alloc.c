@@ -11,9 +11,9 @@ static long pathmax = 0;
 static long posix_version = 0;
 static long xsi_version = 0;
 
-#define PATH_MAX_GUESS
+#define PATH_MAX_GUESS 1024
 
-char * path_alloc(size_t *sizep)
+char *path_alloc(size_t *sizep)
 {
     char *ptr;
     size_t size;
