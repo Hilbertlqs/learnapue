@@ -69,3 +69,4 @@ standards/*
 !standards/sysconf-lim.sym
 !standards/sysconf-opt.sym
 !standards/README
+!standards/path_alloc.c
