@@ -59,3 +59,13 @@ build/*
 !.vscode/launch.json
 !.vscode/extensions.json
 !.vscode/*.code-snippets
+standards/*
+!standards/conf.c.modified
+!standards/makeconf.awk
+!standards/Makefile
+!standards/makeopt.awk
+!standards/pathconf-lim.sym
+!standards/pathconf-opt.sym
+!standards/sysconf-lim.sym
+!standards/sysconf-opt.sym
+!standards/README

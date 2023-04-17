@@ -1,4 +1,4 @@
-DIRS = lib intro
+DIRS = lib intro standards
 
 all:
 	for i in $(DIRS); do \
