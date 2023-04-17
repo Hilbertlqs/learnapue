@@ -71,3 +71,4 @@ standards/*
 !standards/README
 !standards/path_alloc.c
 !standards/open_max.c
+!standards/exercises
