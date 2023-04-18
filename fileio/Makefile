@@ -3,7 +3,7 @@ PLATFORM=$(shell $(ROOT)/systype.sh)
 include $(ROOT)/Make.defines.$(PLATFORM)
 
 OUTPUT_DIR = $(ROOT)/build/fileio
-PROGS = hole seek
+PROGS = hole mycat seek
 
 all: $(OUTPUT_DIR) $(PROGS) $(OUTPUT_DIR)/setfl.o
 
