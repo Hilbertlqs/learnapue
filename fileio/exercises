@@ -1,0 +1,124 @@
+3.1
+术语不带缓冲指的是每个read和write都调用内核中的一个系统调用。
+大多数文件系统为改善性能都采用某种预读(read ahead)技术。当测到正进行顺序读取时，系统就试图读入比应用所要求的更多数据，并假想应用很快就会读这些数据。
+传统的UNIX系统实现在内核中设有缓冲区高速缓存或页高速缓存，大多数磁盘IO都通过缓冲区进行。当我们向文件写入数据时，内核通常先将数据复制到缓冲区中，然后排入队列，晚些时候再写入磁盘。这种方式被称为延迟写(delayed write)。
+通常，当内核需要重用缓冲区来存放其他磁盘块数据时，它会把所有延迟写数据块写入磁盘。
+在UNIX系统中，通常write只是将数据排入队列，而实际的写磁盘操作则可能在以后的某个时刻进行。而数据库系统则需要使用O_SYNC，这样一来，当它从write返回时就知道数据已确实写到了盘上，以免在系统异常时产生数据丢失。
+因为read和write都在内核执行，所以称这些函数为不带缓冲的IO函数。
+所有磁盘I/O都要经过内核的块缓存区(也称为内核的缓冲区高速缓存)。唯一例外的是对原始磁盘设备的I/O，但是我们不考虑这种情况。既然read或write的数据都要被内核缓冲，那么术语“不带缓冲的I/O”指的是在用户的进程中对这两个函数不会自动缓冲，每次read或write就要进行一次系统调用。
+
+3.2
+reference:
+https://www.cnblogs.com/mingyunrangwozoudaoxianzai/p/12360933.html
+https://github.com/MeiK2333/apue/tree/master/Chapter-03
+#include "apue.h"
+#include <limits.h>
+#include <sys/resource.h>
+#include <errno.h>
+#include <fcntl.h>
+
+#define OPEN_MAX_GUESS 256
+
+long open_max(void)
+{
+    long openmax;
+    struct rlimit rl;
+
+    if ((openmax = sysconf(_SC_OPEN_MAX)) < 0 || openmax == LONG_MAX) {
+        if (getrlimit(RLIMIT_NOFILE, &rl) < 0)
+            err_sys("can't get file limit");
+        if (rl.rlim_max == RLIM_INFINITY)
+            openmax = OPEN_MAX_GUESS;
+        else
+            openmax = rl.rlim_max;
+    }
+    return(openmax);
+}
+
+/* 对于dup2，可以用fd2参数指定新描述符的值。 */
+int my_dup2(int fd, int fd2)
+{
+    int dup_fd;
+    int begin_fd;
+    long openmax;
+    int i;
+
+    openmax = open_max();
+    printf("openmax is %ld\n", openmax);
+
+    if (fd < 0 || fd2 < 0 || fd > (openmax - 1) || fd2 > (openmax - 1)) {
+        perror("fd error");
+        return -1;
+    }
+
+    /* 如若fd等于fd2，则dup2返回fd2，而不关闭它。否则，fd2的FD_CLOEXEC文件描述符标志就被清除，这样fd2在进程调用exec时是打开状态。 */
+    if(fd == fd2) {
+        return fd2;
+    }
+
+    /* 如果fd2已经打开，则先将其关闭。 */
+    close(fd2);
+
+    /* 由dup返回的新文件描述符一定是当前可用文件描述符中的最小数值。 */
+    dup_fd = dup(fd);
+    if (dup_fd == -1) {
+        perror("dup error");
+        return -1;
+    }
+    printf("create fd %d\n", dup_fd);
+    begin_fd = dup_fd;
+    while (dup_fd < (openmax - 1)) {
+        if (dup_fd == fd2) {
+            printf("get fd2\n");
+            break;
+        }
+        dup_fd = dup(fd);
+        if (dup_fd == -1) {
+            perror("dup error");
+            return -1;
+        }
+        printf("create fd %d\n", dup_fd);
+    }
+
+    if (dup_fd == (openmax - 1)) {
+        printf("do not get fd2 within openmax fds\n");
+        for (i = begin_fd; i <= dup_fd; ++i) {
+            close(i);
+        }
+        return -1;
+    }
+
+    for (i = begin_fd; i < dup_fd; ++i) {
+       close(i);
+    }
+
+    return dup_fd;
+}
+
+int main(int argc, char *argv[])
+{
+    int fd;
+    int fd2;
+    char *buf = "my_dup2 test\n";
+
+    if (argc != 2)
+        err_quit("usage: my_dup2 <descriptor#>");
+
+    if ((fd = open("my_dup2_text", O_RDWR | O_CREAT | O_TRUNC, 0644)) == -1)
+        err_sys("open error");
+
+    fd2 = my_dup2(fd, atoi(argv[1]));
+    if (fd2 == -1)
+        err_sys("my_dup2 error");
+    printf("fd2 is %d\n", fd2);
+
+    if (write(fd2, buf, strlen(buf)) != strlen(buf))
+        err_sys("write error");
+
+    close(fd2);
+
+    exit(0);
+}
+
+make
+./build/fileio/my_dup2 fd
