@@ -1,5 +1,15 @@
 #!/bin/bash
 
+usage()
+{
+    echo "usage: `basename $0` git_add_files \"git_commit_message\""
+}
+
+if [ $# -lt 1 ]; then
+    usage
+    exit 1
+fi
+
 # git add
 # for file in "$@"
 # do
@@ -14,7 +24,9 @@ do
 done
 
 # git commit
+echo "git commit $(eval echo \$$#)"
 git commit -m "$(eval echo \$$#)"
 
 # git push
+echo "git push github master"
 git push github master
