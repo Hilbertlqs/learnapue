@@ -5,12 +5,15 @@ include $(ROOT)/Make.defines.$(PLATFORM)
 OUTPUT_DIR = $(ROOT)/build/fileio
 PROGS = fileflags hole mycat seek
 
-all: $(OUTPUT_DIR) $(PROGS) $(OUTPUT_DIR)/setfl.o
+all: $(OUTPUT_DIR) $(PROGS) $(OUTPUT_DIR)/setfl.o $(OUTPUT_DIR)/clrfl.o
 
 %: %.c $(LIBAPUE)
 	$(CC) $(CFLAGS) $@.c -o $(OUTPUT_DIR)/$@ $(LDFLAGS) $(LDLIBS)
 
 $(OUTPUT_DIR)/setfl.o: setfl.c
+	$(CC) $(CFLAGS) -c -fPIC $^ -o $@ $(LDFLAGS) $(LDLIBS)
+
+$(OUTPUT_DIR)/clrfl.o: clrfl.c
 	$(CC) $(CFLAGS) -c -fPIC $^ -o $@ $(LDFLAGS) $(LDLIBS)
 
 $(OUTPUT_DIR):
