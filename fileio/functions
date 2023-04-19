@@ -94,3 +94,18 @@ fcntl函数有以下5种功能。
 (3)获取/设置文件状态标志(cmd = F_GETFL或F_SETFL)。
 (4)获取/设置异步I/0所有权(cmd = F_GETOWN或F_SETOWN)。
 (5)获取/设置记录锁(cmd = F_GETLK、F_SETLK或F_SETLKW)。
+fileflags.c:
+$ ./fileflags 0 < /dev/tty
+read only
+$ ./fileflags 1 > temp.foo
+$ cat temp.foo 
+write only
+$ ./fileflags 2 2>>temp.foo 
+write only, append
+$ cat temp.foo 
+write only
+$ ./fileflags 5 5<>temp.foo
+read write
+$ cat temp.foo 
+write only
+子句5<>temp.foo表示在文件描述符5上打开文件temp.foo以供读、写。
