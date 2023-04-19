@@ -81,7 +81,7 @@ int my_dup2(int fd, int fd2)
     }
 
     if (dup_fd == (openmax - 1)) {
-        printf("do not get fd2 within openmax fds\n");
+        printf("cannot get fd2 within openmax fds\n");
         for (i = begin_fd; i <= dup_fd; ++i) {
             close(i);
         }
