@@ -24,7 +24,7 @@ do
 done
 
 # git commit
-echo "git commit $(eval echo \$$#)"
+echo "git commit -m \"$(eval echo \$$#)\""
 git commit -m "$(eval echo \$$#)"
 
 # git push
