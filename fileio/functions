@@ -109,3 +109,16 @@ read write
 $ cat temp.foo 
 write only
 子句5<>temp.foo表示在文件描述符5上打开文件temp.foo以供读、写。
+
+#include <unistd.h> /* System V */
+#include <sys/ioctl.h> /* BSD and Linux */
+int ioctl(int fd, int request, ...);
+返回值：若出错，返回-1；若成功，返回其他值
+
+较新的系统都提供名为/dev/fd的目录，其目录项是名为0、1、2等的文件。打开文件/dev/fd/n等效于复制描述符n(假定描述符n是开的)。
+某些系统提供路径名/dev/stdin、/dev/stdout和/dev/stderr，这些等效于/dev/fd/0、/dev/fd/1和/dev/fd/2。
+/dev/fd文件主要由shel1使用，它允许使用路径名作为调用参数的程序，能用处理其他路径名的相同方式处理标准输入和输出。例如，cat(1)命令对其命令行参数采取了一种特殊处理，它将单独的一个字符“-”解释为标准输入。例如：
+filter file2 | cat filel - file3 | lpr
+首先cat读filel，接着读其标准输入(也就是filter file2命令的输出)，然后读file3，如果支持/dev/fd，则可以删除cat对“-”的特殊处理，于是我们就可键入下列命令行：
+filter file2 | cat filel /dev/fd/0 file3 | 1pr
+作为命令行参数的“-”特指标准输入或标准输出，这已由很多程序采用。但是这会带来一些问题，例如，如果用“-”指定第一个文件，那么看来就像指定了命令行的一个选项。/dev/fd则提高了文件名参数的一致性，也更加清晰。
