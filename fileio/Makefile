@@ -3,7 +3,7 @@ PLATFORM=$(shell $(ROOT)/systype.sh)
 include $(ROOT)/Make.defines.$(PLATFORM)
 
 OUTPUT_DIR = $(ROOT)/build/fileio
-PROGS = fileflags hole mycat seek my_dup2
+PROGS = fileflags hole mycat seek my_dup2 my_dup2_list
 
 all: $(OUTPUT_DIR) $(PROGS) $(OUTPUT_DIR)/setfl.o $(OUTPUT_DIR)/clrfl.o
 
