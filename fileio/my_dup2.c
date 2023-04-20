@@ -65,8 +65,8 @@ int my_dup2(int fd, int fd2)
         if (temp_fd == -1) {
             perror("dup error");
             for (i = begin_fd; i <= dup_fd; ++i) {
-                printf("close fd %d\n", i);
                 close(i);
+                printf("close fd %d\n", i);
             }
             return -1;
         }
@@ -77,15 +77,15 @@ int my_dup2(int fd, int fd2)
     if (dup_fd == (openmax - 1)) {
         printf("cannot get fd2 within openmax fds\n");
         for (i = begin_fd; i <= dup_fd; ++i) {
-            printf("close fd %d\n", i);
             close(i);
+            printf("close fd %d\n", i);
         }
         return -1;
     }
 
     for (i = begin_fd; i < dup_fd; ++i) {
-        printf("close fd %d\n", i);
         close(i);
+        printf("close fd %d\n", i);
     }
 
     return dup_fd;
@@ -111,8 +111,8 @@ int main(int argc, char *argv[])
     if (write(fd2, buf, strlen(buf)) != strlen(buf))
         err_sys("write error");
 
-    printf("close fd %d\n", fd2);
     close(fd2);
+    printf("close fd %d\n", fd2);
 
     exit(0);
 }
