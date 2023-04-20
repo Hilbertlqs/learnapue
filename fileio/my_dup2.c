@@ -27,6 +27,7 @@ int my_dup2(int fd, int fd2)
 {
     int dup_fd;
     int begin_fd;
+    int temp_fd;
     long openmax;
     int i;
 
@@ -47,11 +48,12 @@ int my_dup2(int fd, int fd2)
     close(fd2);
 
     /* 由dup返回的新文件描述符一定是当前可用文件描述符中的最小数值。 */
-    dup_fd = dup(fd);
-    if (dup_fd == -1) {
+    temp_fd = dup(fd);
+    if (temp_fd == -1) {
         perror("dup error");
         return -1;
     }
+    dup_fd = temp_fd;
     printf("create fd %d\n", dup_fd);
     begin_fd = dup_fd;
     while (dup_fd < (openmax - 1)) {
@@ -59,24 +61,31 @@ int my_dup2(int fd, int fd2)
             printf("get fd2\n");
             break;
         }
-        dup_fd = dup(fd);
-        if (dup_fd == -1) {
+        temp_fd = dup(fd);
+        if (temp_fd == -1) {
             perror("dup error");
+            for (i = begin_fd; i <= dup_fd; ++i) {
+                printf("close fd %d\n", i);
+                close(i);
+            }
             return -1;
         }
+        dup_fd = temp_fd;
         printf("create fd %d\n", dup_fd);
     }
 
     if (dup_fd == (openmax - 1)) {
         printf("cannot get fd2 within openmax fds\n");
         for (i = begin_fd; i <= dup_fd; ++i) {
+            printf("close fd %d\n", i);
             close(i);
         }
         return -1;
     }
 
     for (i = begin_fd; i < dup_fd; ++i) {
-       close(i);
+        printf("close fd %d\n", i);
+        close(i);
     }
 
     return dup_fd;
@@ -102,6 +111,7 @@ int main(int argc, char *argv[])
     if (write(fd2, buf, strlen(buf)) != strlen(buf))
         err_sys("write error");
 
+    printf("close fd %d\n", fd2);
     close(fd2);
 
     exit(0);
