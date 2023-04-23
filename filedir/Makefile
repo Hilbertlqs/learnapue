@@ -9,7 +9,7 @@ else
 endif
 
 OUTPUT_DIR = $(ROOT)/build/filedir
-PROGS = filetype
+PROGS = access filetype
 MOREPROGS = 
 
 all: $(OUTPUT_DIR) $(PROGS) $(MOREPROGS)
