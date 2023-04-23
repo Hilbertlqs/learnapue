@@ -1,0 +1,124 @@
+#include <fcntl.h>
+int open(const char *path, int oflag, ... /* mode_t mode */);
+int openat(int fd, const char *path, int oflag, ... /* mode_t mode */);
+两函数的返回值：若成功，返回文件描述符；若出错，返回-1
+oflag:
+    必须指定一个且只能指定一个常量
+    O_RDONLY
+    O_WRONLY
+    O_RDWR
+    O_EXEC
+    O_SEARCH    应用于目录
+    可选常量
+    O_APPEND
+    O_CLOEXEC
+    O_CREAT     open函数需同时说明第3个参数mode(openat函数需说明第4个参数mode)
+    O_DIRECTORY
+    O_EXCL      如果同时指定了O_CREAT，而文件已经存在，则出错。用此可以测试一个文件是否存在，如果不存在，则创建此文件，这使测试和创建两者成为一个原子操作。
+    O_NOCTTY
+    O_NOFOLLOW
+    O_NONBLOCK
+    O_SYNC      数据和属性总是同步更新
+    O_TRUNC
+    O_TTY_INIT
+    O_DSYNC     attribute is updated only if data changed
+    O_RSYNC     使每一个以文件描述符作为参数进行的read操作等待，直至有对文件同一部分挂起的写操作都完成。
+
+#include <fcntl.h>
+int creat(const char *path, mode_t mode);
+返回值：若成功，返回为只写打开的文件描述符；若出错，返回-1
+等效于
+open(path, O_WRONLY | O_CREAT | O_TRUNC, mode);
+
+#include <unistd.h>
+int close(int fd);
+
+#include <unistd.h>
+off_t lseek(int fd, off_t offset, int whence);
+返回值：若成功，返回新的文件偏移量；若出错，返回为-1
+whence:
+SEEK_SET
+SEEK_CUR
+SEEK_END
+
+#include <unistd.h>
+ssize_t read(int fd, void *buf, size_t nbytes);
+返回值：读到的字节数，若已到文件尾，返回0；若出错，返回-1
+
+#include <unistd.h>
+ssize_t write(int fd, const void *buf, size_t nbytes);
+返回值：若成功，返回已写的字节数；若出错，返回-1
+
+#include <unistd.h>
+ssize_t pread(int fd, void *buf, size_t nbytes, off_t offset);
+返回值：读到的字节数，若已到文件尾，返回0；若出错，返回-1
+ssize_t pwrite(int fd, const void *buf, size_t nbytes, off_t offset);
+返回值：若成功，返回已写的字节数；若出错，返回-1
+调用pread相当于调用lseek后调用read，但是pread又与这种顺序调用有下列重要区别。
+    调用pread时，无法中断其定位和读操作。
+    不更新当前文件偏移量。
+调用pwrite相当于调用lseek后调用write，但也与它们有类似的区别。
+
+#include <unistd.h>
+int dup(int fd);
+int dup2(int fd, int fd2);
+两函数的返回值：若成功，返回新的文件描述符；若出错，返回-1
+由dup返回的新文件描述符一定是当前可用文件描述符中的最小数值。对于dup2，可以用fd2参数指定新描述符的值。如果fd2已经打开，则先将其关闭。如若fd等于fd2，则dup2返回fd2，而不关闭它。否则，fd2的FD_CLOEXEC文件描述符标志就被清除，这样fd2在进程调用exec时是打开状态。
+这些函数返回的新文件描述符与参数fd共享同一个文件表项。
+新描述符的执行时关闭(close-on-exec)标志总是由dup函数清除。
+复制一个描述符的另一种方法是使用fcntl函数。实际上，调用
+    dup(fd);
+等效于
+    fcntl(fd, F_DUPFD, 0);
+而调用
+    dup2(fd, fd2);
+等效于
+    close(fd2);
+    fcntl(fd, F_DUPFD, fd2);
+在后一种情况下，dup2并不完全等同于close加上fcntl。它们之间的区别具体如下。
+(1)dup2是一个原子操作，而close和fcnt1包括两个函数调用。有可能在close和fcnt1之间调用了信号捕获函数，它可能修改文件描述符。如果不同的线程改变了文件描述符的话也会出现相同的问题。
+(2)dup2和fcnt1有一些不同的errno。
+
+#include <unistd.h>
+int fsync(int fd);
+int fdatasync(int fd);
+返回值：若成功，返回0；若出错，返回-1
+void sync(void);
+
+#include <fcntl.h>
+int fcntl(int fd, int cmd, ... /* int arg */);
+返回值：若成功，则依赖于cmd；若出错，返回-1
+fcntl函数有以下5种功能。
+(1)复制一个已有的描述符(cmd = F_DUPFD或F_DUPFD_CLOEXEC)。
+(2)获取/设置文件描述符标志(cmd = F_GETFD或F_SETFD)。
+(3)获取/设置文件状态标志(cmd = F_GETFL或F_SETFL)。
+(4)获取/设置异步I/0所有权(cmd = F_GETOWN或F_SETOWN)。
+(5)获取/设置记录锁(cmd = F_GETLK、F_SETLK或F_SETLKW)。
+fileflags.c:
+$ ./fileflags 0 < /dev/tty
+read only
+$ ./fileflags 1 > temp.foo
+$ cat temp.foo 
+write only
+$ ./fileflags 2 2>>temp.foo 
+write only, append
+$ cat temp.foo 
+write only
+$ ./fileflags 5 5<>temp.foo
+read write
+$ cat temp.foo 
+write only
+子句5<>temp.foo表示在文件描述符5上打开文件temp.foo以供读、写。
+
+#include <unistd.h> /* System V */
+#include <sys/ioctl.h> /* BSD and Linux */
+int ioctl(int fd, int request, ...);
+返回值：若出错，返回-1；若成功，返回其他值
+
+较新的系统都提供名为/dev/fd的目录，其目录项是名为0、1、2等的文件。打开文件/dev/fd/n等效于复制描述符n(假定描述符n是开的)。
+某些系统提供路径名/dev/stdin、/dev/stdout和/dev/stderr，这些等效于/dev/fd/0、/dev/fd/1和/dev/fd/2。
+/dev/fd文件主要由shel1使用，它允许使用路径名作为调用参数的程序，能用处理其他路径名的相同方式处理标准输入和输出。例如，cat(1)命令对其命令行参数采取了一种特殊处理，它将单独的一个字符“-”解释为标准输入。例如：
+filter file2 | cat filel - file3 | lpr
+首先cat读filel，接着读其标准输入(也就是filter file2命令的输出)，然后读file3，如果支持/dev/fd，则可以删除cat对“-”的特殊处理，于是我们就可键入下列命令行：
+filter file2 | cat filel /dev/fd/0 file3 | 1pr
+作为命令行参数的“-”特指标准输入或标准输出，这已由很多程序采用。但是这会带来一些问题，例如，如果用“-”指定第一个文件，那么看来就像指定了命令行的一个选项。/dev/fd则提高了文件名参数的一致性，也更加清晰。
