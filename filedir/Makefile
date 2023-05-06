@@ -9,7 +9,7 @@ else
 endif
 
 OUTPUT_DIR = $(ROOT)/build/filedir
-PROGS = access changemod filetype umask unlink
+PROGS = access changemod filetype umask unlink $(ZAP)
 MOREPROGS = 
 
 all: $(OUTPUT_DIR) $(PROGS) $(MOREPROGS)
