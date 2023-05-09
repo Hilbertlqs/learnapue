@@ -10,7 +10,7 @@ endif
 
 OUTPUT_DIR = $(ROOT)/build/filedir
 PROGS = access changemod filetype umask unlink $(ZAP)
-MOREPROGS = 
+MOREPROGS = ftw8
 
 all: $(OUTPUT_DIR) $(PROGS) $(MOREPROGS)
 
