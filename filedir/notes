@@ -368,3 +368,88 @@ $ ls -lu build/filedir/changemod
 $ ls -lc build/filedir/changemod 
 -rwxrwxr-x 1 lqs lqs 0 5月   6 17:30 build/filedir/changemod
 正如我们所预见的一样，最后修改时间和最后访问时间未变。但是，状态更改时间则更改为程序运行时的时间。
+
+用mkdir和mkdirat函数创建目录，用rmdir函数删除目录。
+#include <sys/stat.h>
+int mkdir(const char *pathname, mode_t mode);
+int mkdirat(int fd, const char *pathname, mode_t mode);
+两个函数返回值：若成功，返回0；若出错，返回-1
+这两个函数创建一个新的空目录。其中，.和..目录项是自动创建的。所指定的文件访问权限mode由进程的文件模式创建屏蔽字修改。
+常见的错误是指定与文件相同的mode(只指定读、写权限)。但是，对于目录通常至少要设置一个执行权限位，以允许访问该目录中的文件名。
+按照之前讨论的规则来设置新目录的用户ID和组ID。
+mkdirat函数与mkdir函数类似。当fd参数具有特殊值AT_FDCWD或者pathname参数指定了绝对路径名时，mkdirat与mkdir完全一样。否则，fd参数是一个打开目录，相对路径名根据此打开目录进行计算。
+用rmdir函数可以删除一个空目录。空目录是只包含.和..这两项的目录。
+#include <unistd.h>
+int rmdir(const char *pathname);
+返回值：若成功，返回0；若出错，返回-1
+如果调用此函数使目录的链接计数成为0，并且也没有其他进打开此目录，则释放由此目录占用的空间。如果在链接计数达到0时，有一个或多个进程打开此目录，则在此函数返回前删除最后一个链接及.和..项。另外，在此目录中不能再创建新文件。但是在最后一个进程关闭它之前并不释放此目录。(即使另一些进程打开该目录，它们在此目录下也不能执行其他操作。这样处理的原因是，为了使rmdir函数成功执行，该目录必须是空的。)
+
+对某个目录具有访问权限的任一用户都可以读该目录，但是，为了防止文件系统产生混乱，只有内核才能写目录。一个目录的写权限位和执行权限位决定了在该目录中能否创建新文件以及删除文件，它们并不表示能否写目录本身。
+目录的实际格式依赖于UNIX系统实现和文件系统的设计。早期的系统(如V7)有一个比较简单的结构：每个目录项是16个字节，其中14个字节是文件名，2个字节是i节点编号。而对于4.2BSD，由于它允许更长的文件名，所以每个目录项的长度是可变的。这就意味着读目录的程序与系统相关。为了简化读目录的过程，UNIX现在包含了一套与目录有关的例程，它们是POSIX.1的一部分。很多实现阻止应用程序使用read函数读取目录的内容，由此进一步将应用程序与目录格式中与实现相关的细节隔离。
+#include <dirent.h>
+DIR *opendir(const char *pathname);
+DIR *fdopendir(int fd);
+两个函数返回值：若成功，返回指针；若出错，返回NULL
+struct dirent *readdir(DIR *dp);
+返回值：若成功，返回指针；若在目录尾或出错，返回NULL
+void rewinddir(DIR *dp);
+int closedir(DIR *dp);
+返回值：若成功，返回0；若出错，返回-1
+long telldir(DIR *dp);
+返回值：与dp关联的目录中的当前位置
+void seekdir(DIR *dp, long loc);
+fdopendir函数最早出现在SUSv4 (Single UNIX Specification 第4版)中，它提供了一种方法，可以把打开文件描述符转换成目录处理函数需要的DIR结构。
+telldir和seekdir函数不是基本POSIX.1标准的组成部分。它们是Single UNIX Specification中的XSI扩展，所以可以期望所有符合UNIX系统的实现都会提供这两个函数。
+定义在头文件<dirent.h>中的dirent结构与实现有关。实现对此结构所做的定义至少包含下列两个成员：
+ino_t d_ino; /* i-node number */
+char d_name[]; /* null-terminated filename */
+POSIX.1并没有定义d_ino项，因为这是一个实现特征，但在POSIX.1的XSI扩展中定义了d_ino。POSIX.1在此结构中只定义了d_name项。
+注意，d_name项的大小并没有指定，但必须保证它能包含至少NAME_MAX个字节(不包含终止null字节)。因为文件名是以null字节结束的，所以在头文件中如何定义数组d_name并无多大关系，数组大小并不表示文件名的长度。
+DIR结构是一个内部结构，上述7个函数用这个内部结构保存当前正在被读的目录的有关信息。其作用类似于FILE结构。FILE结构由标准I/O库维护。
+由opendir和fdopendir返回的指向DIR结构的指针由另外5个函数使用。opendir执行初始化操作，使第一个readdir返回目录中的第一个目录项。DIR结构由fdopendir创建时，readdir返回的第一项取决于传给fdopendir函数的文件描述符相关联的文件偏移量。注意，目录中各目录项的顺序与实现有关。它们通常并不按字母顺序排列。
+
+每个进程都有一个当前工作目录，此目录是搜索所有相对路径名的起点(不以斜线开始的路径名为相对路径名)。当用户登录到UNIX系统时，其当前工作目录通常是口令文件(/etc/passwd)中该用户登录项的第6个字段一用户的起始目录(home directory)。当前工作目录是进程的一个属性，起始目录则是登录名的一个属性。
+进程调用chdir或fchdir函数可以更改当前工作目录。
+#include <unistd.h>
+int chdir(const char *pathname);
+int fchdir(int fd);
+两个函数的返回值：若成功，返回0；若出错，返回-1
+在这两个函数中，分别用pathname或打开文件描述符来指定新的当前工作目录。
+因为当前工作目录是进程的一个属性，所以它只影响调用chdir的进程本身，而不影响其他进程。
+$ pwd
+/home/lqs/apue3e/learnapue/build/filedir
+$ ./mycd 
+chdir to /tmp succeeded
+$ pwd
+/home/lqs/apue3e/learnapue/build/filedir
+从中可以看出，执行mycd命令的shell的当前工录并没有改变，这是shel1执行程序工作方式的一个副作用。每个程序运行在独立的进程中，shell的当前工作目录并不会随着程序调用chdir而改变。由此可见，为了改变shell进程自己的工作目录，shell应当直接调用chdir函数，为此，cd命令内建在shell中。
+
+因为内核必须维护当前工作目录的信息，所以我们应能获取其当前值。遗憾的是，内核为每个进程只保存指向该目录v节点的指针等目录本身的信息，并不保存该目录的完整路径名。
+我们需要一个函数，它从当前工作目录(.)开始，用..找到其上一级目录，然后读其目录项，直到该目录项中的i节点编号与工作目录i节点编号相同，这样地就找到了其对应的文件名。按照这种方法，逐层上移，直到遇到根，这样就得到了当前工作目录完整的绝对路径名。很幸运，函数getcwd就提供了这种功能。
+#include <unistd.h>
+char *getcwd(char *buf, size_t size);
+返回值：若成功，返回buf；若出错，返回NULL
+必须向此函数传递两个参数，一个是缓冲区地址buf，另一个是缓冲区的长度size(以字节为单位)。该缓冲区必须有足够的长度以容纳绝对路径名再加上一个终止null字节，否则返回出错。
+
+注意，chdir跟随符号链接，但是当getcwd沿目录树上溯遇到/var/spool目录时，它并不了解该目录由符号链接/usr/spool所指向。这是符号链接的一种特性。
+当一个应用程序需要在文件系统中返回到它工作的出发点时，getwd函数是有用的。在更换工作目录之前，我们可以调用getcwd函数先将其保存起来。在完成了处理后，就可将所保存的原工作目录路径名作为调用参数传送给chdir，这样就返回到了文件系统中的出发点。
+fchdir函数向我们提供了一种完成此任务的便捷方法。在更换到文件系统中的不同位置前无需调用getcwd函数，而是使用open打开当前工作目录，然后保存其返回的文件描述符。当希望回到原工作目录时，只要简单地将该文件描述符传送给fchdir。
+
+常量     说明        对普通文件的影响                                                    对目录的影响
+S_ISUID  设置用户ID  执行时设置有效用户ID                                                (未使用)
+S_ISGID  设组ID      若组执行位设置，则执行时设置有效组ID；否则使强制性锁起作用(若支持)  将在目录中创建的新文件的组ID设置为目录的组ID
+S_ISVTX  粘着位      在交换区缓存程序正文(若支持)                                        限止在目录中删除和重命名文件
+S IRUSR  用户读      许可用户读文件                                                      许可用户读目录项
+S_IWUSR  用户写      许可用户写文件                                                      许可用户在目录中删除和创建文件
+S_IXUSR  用户执行    许可用户执行文件                                                    许可用户在目录中搜索给定路径名
+S_IRGRP  组读        许可组读文件                                                        许可组读目录项
+S IWGRP  组写        许可组写文件                                                        许可组在目录中刑除和创建文件
+S_IXGRP  组执行      许可组执行文件                                                      许可组在目录中搜案给定路径名
+S_IROTH  其他读      许可其他读文件                                                      许可其他读目录项
+S_IWOTH  其他写      许可其他写文件                                                      许可其他在目录中删除和创建文件
+S_IXOTH  其他执行    许可其他执行文件                                                    许可其他在目录中搜索给定路径名
+文件访问权限位小结
+最后9个常量还可以分成如下3组:
+S_IRWXU = S_IRUSR | IS_IWUSR | IS_IXUSR
+S_IRWXG = S_IRGRP | IS_IWGRP | IS_IXGRP
+S_IRWXO = S_IROTH | IS_IWOTH | IS_IXOTH
