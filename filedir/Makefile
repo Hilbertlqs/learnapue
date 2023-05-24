@@ -9,7 +9,7 @@ else
 endif
 
 OUTPUT_DIR = $(ROOT)/build/filedir
-PROGS = access changemod filetype mycd umask unlink $(ZAP)
+PROGS = access cdpwd changemod filetype mycd umask unlink $(ZAP)
 MOREPROGS = ftw8
 
 all: $(OUTPUT_DIR) $(PROGS) $(MOREPROGS)
