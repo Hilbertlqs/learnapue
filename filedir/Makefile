@@ -9,8 +9,8 @@ else
 endif
 
 OUTPUT_DIR = $(ROOT)/build/filedir
-PROGS = access cdpwd changemod devrdev filetype mycd umask unlink $(ZAP)
-MOREPROGS = ftw8
+PROGS = access cdpwd changemod devrdev filetype mycd umask unlink $(ZAP) cp
+MOREPROGS = ftw8 ftw8_chdir dir_depth unlink_dev_fd
 
 all: $(OUTPUT_DIR) $(PROGS) $(MOREPROGS)
 
