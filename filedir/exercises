@@ -1,0 +1,786 @@
+4.1
+stat函数总是跟随符号链接，所以该程序决不会显示文件类型是“符号链接”。例如，正如本书正文中所示，/dev/cdrom是/dev/sr0的一个符号链接，但是stat函数的结果只显示/dev/cdrom是一个块特殊文件，而不报告它是一个符号链接。若符号链接指向一个不存在的文件，stat会出错返回。
+
+4.2
+将关闭该文件的所有访问权限。
+$ umask
+0002
+$ umask 777
+$ umask
+0777
+$ date > temp.foo
+$ ls -l temp.foo 
+---------- 1 lqs lqs 43 5月  24 13:58 temp.foo
+$ umask 0002
+$ umask
+0002
+
+4.3
+$ date > foo
+$ ls -l foo
+-rw-rw-r-- 1 lqs lqs 43 5月  24 15:29 foo
+$ chmod u-r foo
+$ ls -l foo
+--w-rw-r-- 1 lqs lqs 43 5月  24 15:29 foo
+$ cat foo
+cat: foo: Permission denied
+
+4.4
+如果用open或creat创建已经存在的文件，则该文件的访问权限位不变。
+$ rm foo bar 
+$ date > foo
+$ date > bar
+$ chmod a-r foo bar 
+$ ls -l foo bar 
+--w--w---- 1 lqs lqs 43 5月  24 15:37 bar
+--w--w---- 1 lqs lqs 43 5月  24 15:37 foo
+$ ./umask 
+$ ls -l foo bar 
+--w--w---- 1 lqs lqs 0 5月  24 15:39 bar
+--w--w---- 1 lqs lqs 0 5月  24 15:39 foo
+可以看出访问权限没有改变，但是文件被截断了。
+
+4.5
+stat结构成员st_size表示以字节为单位的文件的长度。此字段只对普通文件、目录文件和符号链接有意义。
+对于普通文件，其文件长度可以是0，在开始读这种文件时，将得到文件结束(end-of-file)指示。对于目录，文件长度通常是一个数(如16或512)的整数倍。
+对于符号链接，文件长度是在文件名中的实际字节数。
+目录的长度从来不会是0，因为它总是包含.和..两项。符号链接的长度指其路径名包含的字符数，由于路径名中至少有一个字符，所以长度也不为0。
+
+4.6
+#include "apue.h"
+#include <fcntl.h>
+
+#define BUFFSIZE 4096
+
+int main(int argc, char *argv[])
+{
+    int fd1, fd2;
+    struct stat stat;
+    int has_hole = 0;
+    int n;
+    char buf[BUFFSIZE];
+    char tmp_buf[BUFFSIZE];
+    int i, j;
+
+    if (argc != 3)
+        err_quit("usage: %s <source_file> <target_file>", argv[0]);
+
+    if ((fd1 = open(argv[1], O_RDONLY)) == -1)
+        err_sys("%s open error", argv[1]);
+    if ((fd2 = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0644)) == -1)
+        err_sys("%s open error", argv[2]);
+
+    if (fstat(fd1, &stat) == -1)
+        err_sys("fstat error");
+    if (S_ISREG(stat.st_mode) && stat.st_size > 512 * stat.st_blocks) {/* 512 or 1024 or other value? generally, stat.st_blksize = 4096 */
+        printf("%s has hole\n", argv[1]);
+        has_hole = 1;
+    }
+
+    if (has_hole) {
+        while ((n = read(fd1, buf, BUFFSIZE)) != -1) {
+            if (n == 0) {
+                printf("end of file\n");
+                break;
+            } else {
+                for (i = 0, j = 0; i < n; i++) {
+                    if (buf[i] != 0)
+                        tmp_buf[j++] = buf[i];
+                }
+                if (write(fd2, tmp_buf, j) != j)
+                    err_sys("write error");
+            }
+        }
+        if (n == -1)
+            err_sys("read error");
+    } else {
+        while ((n = read(fd1, buf, BUFFSIZE)) != -1) {
+            if (n == 0) {
+                printf("end of file\n");
+                break;
+            } else {
+                if (write(fd2, tmp_buf, n) != n)
+                    err_sys("write error");
+            }
+        }
+        if (n == -1)
+            err_sys("read error");
+    }
+
+    close(fd1);
+    close(fd2);
+
+    exit(0);
+}
+$ ls -l file.hole 
+-rw-r--r-- 1 lqs lqs 16394 5月  24 16:11 file.hole
+$ od -c file.hole 
+0000000   a   b   c   d   e   f   g   h   i   j  \0  \0  \0  \0  \0  \0
+0000020  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0
+*
+0040000   A   B   C   D   E   F   G   H   I   J
+0040012
+$ ./cp file.hole file
+file.hole has hole
+end of file
+$ ls -l file
+-rw-r--r-- 1 lqs lqs 20 5月  25 09:43 file
+$ od -c file
+0000000   a   b   c   d   e   f   g   h   i   j   A   B   C   D   E   F
+0000020   G   H   I   J
+0000024
+$ ls -l cp 
+-rwxrwxr-x 1 lqs lqs 17792 5月  25 09:26 cp
+$ ./cp cp cp_file
+end of file
+$ ls -l cp_file 
+-rw-r--r-- 1 lqs lqs 17792 5月  25 09:44 cp_file
+
+4.7
+当创建新的core文件时，内核对其访问权限有一个默认设置，在本例中是rw-r--r--。这默认值可能会也可能不会被umask的值修改。shel1对创建的重定向的新文件也有一个默认的访问权限，本例中为rw-rw-rw-，这个值总是被当前的umask修改，在本例中umask为02。？
+https://github.com/MeiK2333/apue/tree/master/Chapter-04
+通过 cat 命令复制文件，使用的是 cat 程序的 umask ，和 shell 的 umask 不同。
+
+4.8
+不能使用du的原因是它需要文件名，如
+du tempfile
+或目录名，如
+du
+只有当unlink函数返回时才释放tempfile的目录项，du .命令没有计算仍然被tempfile占用的空间。本例中只能使用df命令查看文件系统中实际可用的空闲空间。
+https://blog.csdn.net/qq_43555873/article/details/127296790
+df可以获取已经删除的文件。
+由于df是通过文件系统来获取空间大小的，当我们删除一个文件的时候，这个文件不是马上就在文件系统当中消失了，而是暂时消失了，当所有程序都不用时，才会根据OS的规则释放掉已经删除的文件。所以当一个文件刚删除清空没完全释放时，df仍会把它计算在内。(当你删除一个大文件前后可以分别用df命令查看一下，刚删除时还在占用磁盘空间)
+du只能看到当前存在的没有被删除的文件。
+du计算的大小就是当前du认为存在的所有文件大小的累加和。当文件系统也确定删除了该文件后，这时候du与df的结果就一致了。
+所以在这一点上，可以说du计算更精确，也可以说df计算有延迟，根据个人情况使用就行。
+
+4.9
+如果被删除的链接不是该文件的最后一个链接，则不会删除该文件。此时，文件的状态更改时间被更新。但是，如果被删除的链接是最后一个链接，则该文件将被物理删除。这时再去更新文件的状态更改时间就没有意义，因为包含文件所有信息的i节点将会随着文件的删除而被释放。
+https://github.com/MeiK2333/apue/tree/master/Chapter-04
+如果删除的链接不是该文件的最后一个链接，则不会删除该文件，状态被更新。
+如果被删除的链接是最后一个链接，则该文件被物理删除。
+i节点中存储了文件的引用次数，修改文件引用会修改i节点，从而修改文件状态更改时间。
+
+4.10
+用opendir打开一个目录后，递归调用函数dopath。假设opendir使用一个文件描述符，并且只有在处理完目录后才调用closedir释放描述符，这就意味着每次降一级就要使用另外一个描述符。所以进程可打开的最大描述符数就限制了我们可以遍历的文件系统树的深度。Single UNIX Specification的XSI扩展中说明的ftw允许调用者指定使用的描述符数，这隐含着可以关闭描述符并且重用它们。
+
+4.11
+$ time -p ./build/filedir/ftw8 ~
+regular files =   15005, 86.56 %
+directories =    1838, 10.60 %
+block special =       0,  0.00 %
+char special =       0,  0.00 %
+FIFOs =       0,  0.00 %
+symbolic links =     492,  2.84 %
+sockets =       0,  0.00 %
+real 5.87
+user 0.04
+sys 2.60
+$ time -p ./build/filedir/ftw8_chdir ~
+regular files =   15005, 86.56 %
+directories =    1838, 10.60 %
+block special =       0,  0.00 %
+char special =       0,  0.00 %
+FIFOs =       0,  0.00 %
+symbolic links =     492,  2.84 %
+sockets =       0,  0.00 %
+real 0.10
+user 0.02
+sys 0.07
+$ time ./build/filedir/ftw8 ~
+regular files =   15005, 86.56 %
+directories =    1838, 10.60 %
+block special =       0,  0.00 %
+char special =       0,  0.00 %
+FIFOs =       0,  0.00 %
+symbolic links =     492,  2.84 %
+sockets =       0,  0.00 %
+
+real    0m0.170s
+user    0m0.011s
+sys     0m0.155s
+$ time ./build/filedir/ftw8_chdir ~
+regular files =   15005, 86.56 %
+directories =    1838, 10.60 %
+block special =       0,  0.00 %
+char special =       0,  0.00 %
+FIFOs =       0,  0.00 %
+symbolic links =     492,  2.84 %
+sockets =       0,  0.00 %
+
+real    0m0.099s
+user    0m0.021s
+sys     0m0.077s
+$ time -p ./build/filedir/ftw8 ~
+regular files =   15005, 86.56 %
+directories =    1838, 10.60 %
+block special =       0,  0.00 %
+char special =       0,  0.00 %
+FIFOs =       0,  0.00 %
+symbolic links =     492,  2.84 %
+sockets =       0,  0.00 %
+real 0.12
+user 0.01
+sys 0.11
+$ time -p ./build/filedir/ftw8_chdir ~
+regular files =   15005, 86.56 %
+directories =    1838, 10.60 %
+block special =       0,  0.00 %
+char special =       0,  0.00 %
+FIFOs =       0,  0.00 %
+symbolic links =     492,  2.84 %
+sockets =       0,  0.00 %
+real 0.10
+user 0.03
+sys 0.06
+$ time ./build/filedir/ftw8 ~
+regular files =   15005, 86.56 %
+directories =    1838, 10.60 %
+block special =       0,  0.00 %
+char special =       0,  0.00 %
+FIFOs =       0,  0.00 %
+symbolic links =     492,  2.84 %
+sockets =       0,  0.00 %
+
+real    0m0.110s
+user    0m0.016s
+sys     0m0.091s
+$ time ./build/filedir/ftw8_chdir ~
+regular files =   15005, 86.56 %
+directories =    1838, 10.60 %
+block special =       0,  0.00 %
+char special =       0,  0.00 %
+FIFOs =       0,  0.00 %
+symbolic links =     492,  2.84 %
+sockets =       0,  0.00 %
+
+real    0m0.097s
+user    0m0.032s
+sys     0m0.065s
+第一次对比时间ftw8运行时间很长，可能存在除了程序运行的其他因素。
+第二次、第三次和第四次对比显示，习题中版本的程序运行时间少于书中程序的运行时间。
+
+4.12
+chroot函数被因特网文件传输协议(Internet File Transfer Protocol，FTP)程序用于辅助安全性。系统中没有账户的用户(也称为匿名FTP)放在一个单独的目录下，利用chroot将此目录当作新的根目录，就可以阻止用户访问此目录以外的文件。
+chroot也用于在另一台机器上构造一个文件系统层次结构的副本，然后修改此副本，不会更改原来的文件系统。这可用于测试新软件包的安装。
+chroot只能由超级用户执行，一旦更改了一个进程的根，该进程及其后代进程就再也不能恢复至原先的根。
+
+4.13
+首先调用stat函数取得文件的3个时间值，然后调用utimes设置期望的值。在调用utimes时我们不希望改变的值应当是stat中相应的值。
+
+4.14
+finger(1)对邮箱调用stat函数，最近一次的修改时间是上一次接收邮件的时间，最近访问时间是上一次读邮件的时间。
+
+4.15
+cpio和tar存储的只是归档文件的修改时间(st_mtim)。因为文件归档时一定会读它，所以该文件的访问时间对应于创建归档文件的时间，因此没有存储其访问时间。cpio的-a选项可以在读输入文件后重新设置该文件的访问时间，于是创建归档文件不改变文件的访问时间。(但是，重置文件的访问时间确实改变了状态更改时间。)状态更改时间没有存储在文挡上，因为即使它曾被归档，在抽取时也不能设置其值。(utimes函数及其相关的futimens和utimensat函数可以更改的仅仅是访问时间和修改时间。)
+对tar来说，在抽取文件时，其默认方式是复原归档时的修改时间值，但是tar的-m选项则将修改时间设置为抽取文件时的时间，而不是复原归档时的修改时间值。对于tar，无论何种情况，在抽取后，文件的访问时间均是抽取文件时的时间。
+另一方面，cpio将访问时间和修改时间设置为抽取文件时的时间。默认情况下，它并不试图将修改时间设置为归档时的值。cpio的-m选项将文件的修改时间和访问时间设置为归档时的值。
+
+4.16
+内核对目录的深度没有内在限制，但是如果路径名的长度超出了PATH_MAX，则有许多命令会失败。以下程序创建了一个深度为1000的目录，每一级录名有45个字符。在所有平台上我们都能构建这样的结构，但并不是在所有平台上都能用getcwd得到第1000级目录的绝对路径名。在Mac OS X 10.6.8中，当到达长路径的目录尾部时，getcwd就不再成功了。在FreeBSD 8.0、Linux 3.2.0和Solaris 10中，getcwd可以获得路径名，但是需要多次调用realloc得到一个足够大的缓冲区。在Liux 3.2.0上运行该程序后得到：
+$ ./a.out
+getcwd failed, size = 4096: Numerical result out of range
+getcwd failed, size = 4196: Numerical result out of range
+...                       省略了418行
+getcwd failed, size = 45896: Numerical result out of range
+getcwd failed, size = 45996: Numerical result out of range
+length = 46004
+                          显示46004字节的路径名
+然而，不能用cpio归档此目录，因为文件名太长了。事实上，cpio在所有 4 种平台上都不能归档此目录。于此对比的是，在FreeBSD 8.0、Linux 3.2.0和Mac OS X 10.68上，可以用tar归档此目录。然而，在Liux 3.2.0上，我们不能从归档文件中抽取出目录的层次结构。
+#include "apue.h"
+#include <fcntl.h>
+
+#define DEPTH 1000
+#define STARTDIR "/tmp"
+#define NAME "alonglonglonglonglonglonglonglonglonglongname"
+#define MAXSZ (10 * 8192)
+
+int main(int argc, char *argv[])
+{
+    int i;
+    size_t size;
+    char *path;
+
+    if (chdir(STARTDIR) < 0)
+        err_sys("chdir error");
+
+    for (i = 0; i < DEPTH; i++) {
+        if (mkdir(NAME, DIR_MODE) < 0)
+            err_sys("mkdir failed, i = %d", i);
+        if (chdir(NAME) < 0)
+            err_sys("chdir failed, i = %d", i);
+    }
+
+    if (creat("afile", FILE_MODE) < 0)
+        err_sys("creat error");
+
+    path = path_alloc(&size);
+    for (;;) {
+        if (getcwd(path, size) != NULL) {
+            break;
+        } else {
+            err_ret("getcwd failed, size = %ld", (long)size);
+            size += 100;
+            if (size > MAXSZ)
+                err_quit("giving up");
+            if ((path = realloc(path, size)) == NULL)
+                err_sys("realloc error");
+        }
+    }
+    printf("length = %ld\n%s\n", (long)strlen(path), path);
+
+    exit(0);
+}
+$ ./dir_depth 
+getcwd failed, size = 4096: Numerical result out of range
+getcwd failed, size = 4196: Numerical result out of range
+getcwd failed, size = 4296: Numerical result out of range
+getcwd failed, size = 4396: Numerical result out of range
+getcwd failed, size = 4496: Numerical result out of range
+getcwd failed, size = 4596: Numerical result out of range
+getcwd failed, size = 4696: Numerical result out of range
+getcwd failed, size = 4796: Numerical result out of range
+getcwd failed, size = 4896: Numerical result out of range
+getcwd failed, size = 4996: Numerical result out of range
+getcwd failed, size = 5096: Numerical result out of range
+getcwd failed, size = 5196: Numerical result out of range
+getcwd failed, size = 5296: Numerical result out of range
+getcwd failed, size = 5396: Numerical result out of range
+getcwd failed, size = 5496: Numerical result out of range
+getcwd failed, size = 5596: Numerical result out of range
+getcwd failed, size = 5696: Numerical result out of range
+getcwd failed, size = 5796: Numerical result out of range
+getcwd failed, size = 5896: Numerical result out of range
+getcwd failed, size = 5996: Numerical result out of range
+getcwd failed, size = 6096: Numerical result out of range
+getcwd failed, size = 6196: Numerical result out of range
+getcwd failed, size = 6296: Numerical result out of range
+getcwd failed, size = 6396: Numerical result out of range
+getcwd failed, size = 6496: Numerical result out of range
+getcwd failed, size = 6596: Numerical result out of range
+getcwd failed, size = 6696: Numerical result out of range
+getcwd failed, size = 6796: Numerical result out of range
+getcwd failed, size = 6896: Numerical result out of range
+getcwd failed, size = 6996: Numerical result out of range
+getcwd failed, size = 7096: Numerical result out of range
+getcwd failed, size = 7196: Numerical result out of range
+getcwd failed, size = 7296: Numerical result out of range
+getcwd failed, size = 7396: Numerical result out of range
+getcwd failed, size = 7496: Numerical result out of range
+getcwd failed, size = 7596: Numerical result out of range
+getcwd failed, size = 7696: Numerical result out of range
+getcwd failed, size = 7796: Numerical result out of range
+getcwd failed, size = 7896: Numerical result out of range
+getcwd failed, size = 7996: Numerical result out of range
+getcwd failed, size = 8096: Numerical result out of range
+getcwd failed, size = 8196: Numerical result out of range
+getcwd failed, size = 8296: Numerical result out of range
+getcwd failed, size = 8396: Numerical result out of range
+getcwd failed, size = 8496: Numerical result out of range
+getcwd failed, size = 8596: Numerical result out of range
+getcwd failed, size = 8696: Numerical result out of range
+getcwd failed, size = 8796: Numerical result out of range
+getcwd failed, size = 8896: Numerical result out of range
+getcwd failed, size = 8996: Numerical result out of range
+getcwd failed, size = 9096: Numerical result out of range
+getcwd failed, size = 9196: Numerical result out of range
+getcwd failed, size = 9296: Numerical result out of range
+getcwd failed, size = 9396: Numerical result out of range
+getcwd failed, size = 9496: Numerical result out of range
+getcwd failed, size = 9596: Numerical result out of range
+getcwd failed, size = 9696: Numerical result out of range
+getcwd failed, size = 9796: Numerical result out of range
+getcwd failed, size = 9896: Numerical result out of range
+getcwd failed, size = 9996: Numerical result out of range
+getcwd failed, size = 10096: Numerical result out of range
+getcwd failed, size = 10196: Numerical result out of range
+getcwd failed, size = 10296: Numerical result out of range
+getcwd failed, size = 10396: Numerical result out of range
+getcwd failed, size = 10496: Numerical result out of range
+getcwd failed, size = 10596: Numerical result out of range
+getcwd failed, size = 10696: Numerical result out of range
+getcwd failed, size = 10796: Numerical result out of range
+getcwd failed, size = 10896: Numerical result out of range
+getcwd failed, size = 10996: Numerical result out of range
+getcwd failed, size = 11096: Numerical result out of range
+getcwd failed, size = 11196: Numerical result out of range
+getcwd failed, size = 11296: Numerical result out of range
+getcwd failed, size = 11396: Numerical result out of range
+getcwd failed, size = 11496: Numerical result out of range
+getcwd failed, size = 11596: Numerical result out of range
+getcwd failed, size = 11696: Numerical result out of range
+getcwd failed, size = 11796: Numerical result out of range
+getcwd failed, size = 11896: Numerical result out of range
+getcwd failed, size = 11996: Numerical result out of range
+getcwd failed, size = 12096: Numerical result out of range
+getcwd failed, size = 12196: Numerical result out of range
+getcwd failed, size = 12296: Numerical result out of range
+getcwd failed, size = 12396: Numerical result out of range
+getcwd failed, size = 12496: Numerical result out of range
+getcwd failed, size = 12596: Numerical result out of range
+getcwd failed, size = 12696: Numerical result out of range
+getcwd failed, size = 12796: Numerical result out of range
+getcwd failed, size = 12896: Numerical result out of range
+getcwd failed, size = 12996: Numerical result out of range
+getcwd failed, size = 13096: Numerical result out of range
+getcwd failed, size = 13196: Numerical result out of range
+getcwd failed, size = 13296: Numerical result out of range
+getcwd failed, size = 13396: Numerical result out of range
+getcwd failed, size = 13496: Numerical result out of range
+getcwd failed, size = 13596: Numerical result out of range
+getcwd failed, size = 13696: Numerical result out of range
+getcwd failed, size = 13796: Numerical result out of range
+getcwd failed, size = 13896: Numerical result out of range
+getcwd failed, size = 13996: Numerical result out of range
+getcwd failed, size = 14096: Numerical result out of range
+getcwd failed, size = 14196: Numerical result out of range
+getcwd failed, size = 14296: Numerical result out of range
+getcwd failed, size = 14396: Numerical result out of range
+getcwd failed, size = 14496: Numerical result out of range
+getcwd failed, size = 14596: Numerical result out of range
+getcwd failed, size = 14696: Numerical result out of range
+getcwd failed, size = 14796: Numerical result out of range
+getcwd failed, size = 14896: Numerical result out of range
+getcwd failed, size = 14996: Numerical result out of range
+getcwd failed, size = 15096: Numerical result out of range
+getcwd failed, size = 15196: Numerical result out of range
+getcwd failed, size = 15296: Numerical result out of range
+getcwd failed, size = 15396: Numerical result out of range
+getcwd failed, size = 15496: Numerical result out of range
+getcwd failed, size = 15596: Numerical result out of range
+getcwd failed, size = 15696: Numerical result out of range
+getcwd failed, size = 15796: Numerical result out of range
+getcwd failed, size = 15896: Numerical result out of range
+getcwd failed, size = 15996: Numerical result out of range
+getcwd failed, size = 16096: Numerical result out of range
+getcwd failed, size = 16196: Numerical result out of range
+getcwd failed, size = 16296: Numerical result out of range
+getcwd failed, size = 16396: Numerical result out of range
+getcwd failed, size = 16496: Numerical result out of range
+getcwd failed, size = 16596: Numerical result out of range
+getcwd failed, size = 16696: Numerical result out of range
+getcwd failed, size = 16796: Numerical result out of range
+getcwd failed, size = 16896: Numerical result out of range
+getcwd failed, size = 16996: Numerical result out of range
+getcwd failed, size = 17096: Numerical result out of range
+getcwd failed, size = 17196: Numerical result out of range
+getcwd failed, size = 17296: Numerical result out of range
+getcwd failed, size = 17396: Numerical result out of range
+getcwd failed, size = 17496: Numerical result out of range
+getcwd failed, size = 17596: Numerical result out of range
+getcwd failed, size = 17696: Numerical result out of range
+getcwd failed, size = 17796: Numerical result out of range
+getcwd failed, size = 17896: Numerical result out of range
+getcwd failed, size = 17996: Numerical result out of range
+getcwd failed, size = 18096: Numerical result out of range
+getcwd failed, size = 18196: Numerical result out of range
+getcwd failed, size = 18296: Numerical result out of range
+getcwd failed, size = 18396: Numerical result out of range
+getcwd failed, size = 18496: Numerical result out of range
+getcwd failed, size = 18596: Numerical result out of range
+getcwd failed, size = 18696: Numerical result out of range
+getcwd failed, size = 18796: Numerical result out of range
+getcwd failed, size = 18896: Numerical result out of range
+getcwd failed, size = 18996: Numerical result out of range
+getcwd failed, size = 19096: Numerical result out of range
+getcwd failed, size = 19196: Numerical result out of range
+getcwd failed, size = 19296: Numerical result out of range
+getcwd failed, size = 19396: Numerical result out of range
+getcwd failed, size = 19496: Numerical result out of range
+getcwd failed, size = 19596: Numerical result out of range
+getcwd failed, size = 19696: Numerical result out of range
+getcwd failed, size = 19796: Numerical result out of range
+getcwd failed, size = 19896: Numerical result out of range
+getcwd failed, size = 19996: Numerical result out of range
+getcwd failed, size = 20096: Numerical result out of range
+getcwd failed, size = 20196: Numerical result out of range
+getcwd failed, size = 20296: Numerical result out of range
+getcwd failed, size = 20396: Numerical result out of range
+getcwd failed, size = 20496: Numerical result out of range
+getcwd failed, size = 20596: Numerical result out of range
+getcwd failed, size = 20696: Numerical result out of range
+getcwd failed, size = 20796: Numerical result out of range
+getcwd failed, size = 20896: Numerical result out of range
+getcwd failed, size = 20996: Numerical result out of range
+getcwd failed, size = 21096: Numerical result out of range
+getcwd failed, size = 21196: Numerical result out of range
+getcwd failed, size = 21296: Numerical result out of range
+getcwd failed, size = 21396: Numerical result out of range
+getcwd failed, size = 21496: Numerical result out of range
+getcwd failed, size = 21596: Numerical result out of range
+getcwd failed, size = 21696: Numerical result out of range
+getcwd failed, size = 21796: Numerical result out of range
+getcwd failed, size = 21896: Numerical result out of range
+getcwd failed, size = 21996: Numerical result out of range
+getcwd failed, size = 22096: Numerical result out of range
+getcwd failed, size = 22196: Numerical result out of range
+getcwd failed, size = 22296: Numerical result out of range
+getcwd failed, size = 22396: Numerical result out of range
+getcwd failed, size = 22496: Numerical result out of range
+getcwd failed, size = 22596: Numerical result out of range
+getcwd failed, size = 22696: Numerical result out of range
+getcwd failed, size = 22796: Numerical result out of range
+getcwd failed, size = 22896: Numerical result out of range
+getcwd failed, size = 22996: Numerical result out of range
+getcwd failed, size = 23096: Numerical result out of range
+getcwd failed, size = 23196: Numerical result out of range
+getcwd failed, size = 23296: Numerical result out of range
+getcwd failed, size = 23396: Numerical result out of range
+getcwd failed, size = 23496: Numerical result out of range
+getcwd failed, size = 23596: Numerical result out of range
+getcwd failed, size = 23696: Numerical result out of range
+getcwd failed, size = 23796: Numerical result out of range
+getcwd failed, size = 23896: Numerical result out of range
+getcwd failed, size = 23996: Numerical result out of range
+getcwd failed, size = 24096: Numerical result out of range
+getcwd failed, size = 24196: Numerical result out of range
+getcwd failed, size = 24296: Numerical result out of range
+getcwd failed, size = 24396: Numerical result out of range
+getcwd failed, size = 24496: Numerical result out of range
+getcwd failed, size = 24596: Numerical result out of range
+getcwd failed, size = 24696: Numerical result out of range
+getcwd failed, size = 24796: Numerical result out of range
+getcwd failed, size = 24896: Numerical result out of range
+getcwd failed, size = 24996: Numerical result out of range
+getcwd failed, size = 25096: Numerical result out of range
+getcwd failed, size = 25196: Numerical result out of range
+getcwd failed, size = 25296: Numerical result out of range
+getcwd failed, size = 25396: Numerical result out of range
+getcwd failed, size = 25496: Numerical result out of range
+getcwd failed, size = 25596: Numerical result out of range
+getcwd failed, size = 25696: Numerical result out of range
+getcwd failed, size = 25796: Numerical result out of range
+getcwd failed, size = 25896: Numerical result out of range
+getcwd failed, size = 25996: Numerical result out of range
+getcwd failed, size = 26096: Numerical result out of range
+getcwd failed, size = 26196: Numerical result out of range
+getcwd failed, size = 26296: Numerical result out of range
+getcwd failed, size = 26396: Numerical result out of range
+getcwd failed, size = 26496: Numerical result out of range
+getcwd failed, size = 26596: Numerical result out of range
+getcwd failed, size = 26696: Numerical result out of range
+getcwd failed, size = 26796: Numerical result out of range
+getcwd failed, size = 26896: Numerical result out of range
+getcwd failed, size = 26996: Numerical result out of range
+getcwd failed, size = 27096: Numerical result out of range
+getcwd failed, size = 27196: Numerical result out of range
+getcwd failed, size = 27296: Numerical result out of range
+getcwd failed, size = 27396: Numerical result out of range
+getcwd failed, size = 27496: Numerical result out of range
+getcwd failed, size = 27596: Numerical result out of range
+getcwd failed, size = 27696: Numerical result out of range
+getcwd failed, size = 27796: Numerical result out of range
+getcwd failed, size = 27896: Numerical result out of range
+getcwd failed, size = 27996: Numerical result out of range
+getcwd failed, size = 28096: Numerical result out of range
+getcwd failed, size = 28196: Numerical result out of range
+getcwd failed, size = 28296: Numerical result out of range
+getcwd failed, size = 28396: Numerical result out of range
+getcwd failed, size = 28496: Numerical result out of range
+getcwd failed, size = 28596: Numerical result out of range
+getcwd failed, size = 28696: Numerical result out of range
+getcwd failed, size = 28796: Numerical result out of range
+getcwd failed, size = 28896: Numerical result out of range
+getcwd failed, size = 28996: Numerical result out of range
+getcwd failed, size = 29096: Numerical result out of range
+getcwd failed, size = 29196: Numerical result out of range
+getcwd failed, size = 29296: Numerical result out of range
+getcwd failed, size = 29396: Numerical result out of range
+getcwd failed, size = 29496: Numerical result out of range
+getcwd failed, size = 29596: Numerical result out of range
+getcwd failed, size = 29696: Numerical result out of range
+getcwd failed, size = 29796: Numerical result out of range
+getcwd failed, size = 29896: Numerical result out of range
+getcwd failed, size = 29996: Numerical result out of range
+getcwd failed, size = 30096: Numerical result out of range
+getcwd failed, size = 30196: Numerical result out of range
+getcwd failed, size = 30296: Numerical result out of range
+getcwd failed, size = 30396: Numerical result out of range
+getcwd failed, size = 30496: Numerical result out of range
+getcwd failed, size = 30596: Numerical result out of range
+getcwd failed, size = 30696: Numerical result out of range
+getcwd failed, size = 30796: Numerical result out of range
+getcwd failed, size = 30896: Numerical result out of range
+getcwd failed, size = 30996: Numerical result out of range
+getcwd failed, size = 31096: Numerical result out of range
+getcwd failed, size = 31196: Numerical result out of range
+getcwd failed, size = 31296: Numerical result out of range
+getcwd failed, size = 31396: Numerical result out of range
+getcwd failed, size = 31496: Numerical result out of range
+getcwd failed, size = 31596: Numerical result out of range
+getcwd failed, size = 31696: Numerical result out of range
+getcwd failed, size = 31796: Numerical result out of range
+getcwd failed, size = 31896: Numerical result out of range
+getcwd failed, size = 31996: Numerical result out of range
+getcwd failed, size = 32096: Numerical result out of range
+getcwd failed, size = 32196: Numerical result out of range
+getcwd failed, size = 32296: Numerical result out of range
+getcwd failed, size = 32396: Numerical result out of range
+getcwd failed, size = 32496: Numerical result out of range
+getcwd failed, size = 32596: Numerical result out of range
+getcwd failed, size = 32696: Numerical result out of range
+getcwd failed, size = 32796: Numerical result out of range
+getcwd failed, size = 32896: Numerical result out of range
+getcwd failed, size = 32996: Numerical result out of range
+getcwd failed, size = 33096: Numerical result out of range
+getcwd failed, size = 33196: Numerical result out of range
+getcwd failed, size = 33296: Numerical result out of range
+getcwd failed, size = 33396: Numerical result out of range
+getcwd failed, size = 33496: Numerical result out of range
+getcwd failed, size = 33596: Numerical result out of range
+getcwd failed, size = 33696: Numerical result out of range
+getcwd failed, size = 33796: Numerical result out of range
+getcwd failed, size = 33896: Numerical result out of range
+getcwd failed, size = 33996: Numerical result out of range
+getcwd failed, size = 34096: Numerical result out of range
+getcwd failed, size = 34196: Numerical result out of range
+getcwd failed, size = 34296: Numerical result out of range
+getcwd failed, size = 34396: Numerical result out of range
+getcwd failed, size = 34496: Numerical result out of range
+getcwd failed, size = 34596: Numerical result out of range
+getcwd failed, size = 34696: Numerical result out of range
+getcwd failed, size = 34796: Numerical result out of range
+getcwd failed, size = 34896: Numerical result out of range
+getcwd failed, size = 34996: Numerical result out of range
+getcwd failed, size = 35096: Numerical result out of range
+getcwd failed, size = 35196: Numerical result out of range
+getcwd failed, size = 35296: Numerical result out of range
+getcwd failed, size = 35396: Numerical result out of range
+getcwd failed, size = 35496: Numerical result out of range
+getcwd failed, size = 35596: Numerical result out of range
+getcwd failed, size = 35696: Numerical result out of range
+getcwd failed, size = 35796: Numerical result out of range
+getcwd failed, size = 35896: Numerical result out of range
+getcwd failed, size = 35996: Numerical result out of range
+getcwd failed, size = 36096: Numerical result out of range
+getcwd failed, size = 36196: Numerical result out of range
+getcwd failed, size = 36296: Numerical result out of range
+getcwd failed, size = 36396: Numerical result out of range
+getcwd failed, size = 36496: Numerical result out of range
+getcwd failed, size = 36596: Numerical result out of range
+getcwd failed, size = 36696: Numerical result out of range
+getcwd failed, size = 36796: Numerical result out of range
+getcwd failed, size = 36896: Numerical result out of range
+getcwd failed, size = 36996: Numerical result out of range
+getcwd failed, size = 37096: Numerical result out of range
+getcwd failed, size = 37196: Numerical result out of range
+getcwd failed, size = 37296: Numerical result out of range
+getcwd failed, size = 37396: Numerical result out of range
+getcwd failed, size = 37496: Numerical result out of range
+getcwd failed, size = 37596: Numerical result out of range
+getcwd failed, size = 37696: Numerical result out of range
+getcwd failed, size = 37796: Numerical result out of range
+getcwd failed, size = 37896: Numerical result out of range
+getcwd failed, size = 37996: Numerical result out of range
+getcwd failed, size = 38096: Numerical result out of range
+getcwd failed, size = 38196: Numerical result out of range
+getcwd failed, size = 38296: Numerical result out of range
+getcwd failed, size = 38396: Numerical result out of range
+getcwd failed, size = 38496: Numerical result out of range
+getcwd failed, size = 38596: Numerical result out of range
+getcwd failed, size = 38696: Numerical result out of range
+getcwd failed, size = 38796: Numerical result out of range
+getcwd failed, size = 38896: Numerical result out of range
+getcwd failed, size = 38996: Numerical result out of range
+getcwd failed, size = 39096: Numerical result out of range
+getcwd failed, size = 39196: Numerical result out of range
+getcwd failed, size = 39296: Numerical result out of range
+getcwd failed, size = 39396: Numerical result out of range
+getcwd failed, size = 39496: Numerical result out of range
+getcwd failed, size = 39596: Numerical result out of range
+getcwd failed, size = 39696: Numerical result out of range
+getcwd failed, size = 39796: Numerical result out of range
+getcwd failed, size = 39896: Numerical result out of range
+getcwd failed, size = 39996: Numerical result out of range
+getcwd failed, size = 40096: Numerical result out of range
+getcwd failed, size = 40196: Numerical result out of range
+getcwd failed, size = 40296: Numerical result out of range
+getcwd failed, size = 40396: Numerical result out of range
+getcwd failed, size = 40496: Numerical result out of range
+getcwd failed, size = 40596: Numerical result out of range
+getcwd failed, size = 40696: Numerical result out of range
+getcwd failed, size = 40796: Numerical result out of range
+getcwd failed, size = 40896: Numerical result out of range
+getcwd failed, size = 40996: Numerical result out of range
+getcwd failed, size = 41096: Numerical result out of range
+getcwd failed, size = 41196: Numerical result out of range
+getcwd failed, size = 41296: Numerical result out of range
+getcwd failed, size = 41396: Numerical result out of range
+getcwd failed, size = 41496: Numerical result out of range
+getcwd failed, size = 41596: Numerical result out of range
+getcwd failed, size = 41696: Numerical result out of range
+getcwd failed, size = 41796: Numerical result out of range
+getcwd failed, size = 41896: Numerical result out of range
+getcwd failed, size = 41996: Numerical result out of range
+getcwd failed, size = 42096: Numerical result out of range
+getcwd failed, size = 42196: Numerical result out of range
+getcwd failed, size = 42296: Numerical result out of range
+getcwd failed, size = 42396: Numerical result out of range
+getcwd failed, size = 42496: Numerical result out of range
+getcwd failed, size = 42596: Numerical result out of range
+getcwd failed, size = 42696: Numerical result out of range
+getcwd failed, size = 42796: Numerical result out of range
+getcwd failed, size = 42896: Numerical result out of range
+getcwd failed, size = 42996: Numerical result out of range
+getcwd failed, size = 43096: Numerical result out of range
+getcwd failed, size = 43196: Numerical result out of range
+getcwd failed, size = 43296: Numerical result out of range
+getcwd failed, size = 43396: Numerical result out of range
+getcwd failed, size = 43496: Numerical result out of range
+getcwd failed, size = 43596: Numerical result out of range
+getcwd failed, size = 43696: Numerical result out of range
+getcwd failed, size = 43796: Numerical result out of range
+getcwd failed, size = 43896: Numerical result out of range
+getcwd failed, size = 43996: Numerical result out of range
+getcwd failed, size = 44096: Numerical result out of range
+getcwd failed, size = 44196: Numerical result out of range
+getcwd failed, size = 44296: Numerical result out of range
+getcwd failed, size = 44396: Numerical result out of range
+getcwd failed, size = 44496: Numerical result out of range
+getcwd failed, size = 44596: Numerical result out of range
+getcwd failed, size = 44696: Numerical result out of range
+getcwd failed, size = 44796: Numerical result out of range
+getcwd failed, size = 44896: Numerical result out of range
+getcwd failed, size = 44996: Numerical result out of range
+getcwd failed, size = 45096: Numerical result out of range
+getcwd failed, size = 45196: Numerical result out of range
+getcwd failed, size = 45296: Numerical result out of range
+getcwd failed, size = 45396: Numerical result out of range
+getcwd failed, size = 45496: Numerical result out of range
+getcwd failed, size = 45596: Numerical result out of range
+getcwd failed, size = 45696: Numerical result out of range
+getcwd failed, size = 45796: Numerical result out of range
+getcwd failed, size = 45896: Numerical result out of range
+getcwd failed, size = 45996: Numerical result out of range
+length = 46004
+/tmp/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname/alonglonglonglonglonglonglonglonglonglongname
+
+4.17
+#include "apue.h"
+#include <fcntl.h>
+
+int main(int argc, char *argv[])
+{
+    int fd;
+
+    if (argc != 2)
+        err_quit("usage: %s <file>");
+
+    unlink(argv[1]);
+    if ((fd = creat(argv[1], FILE_MODE)) < 0)
+        err_sys("creat error");
+
+    exit(0);
+}
+/dev目录关闭了一般用户的写访问权限，以防止普通用户删除目录中的文件名。这就意味着unlink失败。
+在Ubuntu 20.04下测试，unlink未失败，创建了新的/dev/fd/1文件。
+$ ll /dev/ | grep fd
+lrwxrwxrwx   1 root root          13 5月  25 08:50 fd -> /proc/self/fd/
+lrwxrwxrwx   1 root root          15 5月  25 08:50 stderr -> /proc/self/fd/2
+lrwxrwxrwx   1 root root          15 5月  25 08:50 stdin -> /proc/self/fd/0
+lrwxrwxrwx   1 root root          15 5月  25 08:50 stdout -> /proc/self/fd/1|
+$ ll /dev/fd/1
+lrwx------ 1 lqs lqs 64 5月  25 17:26 /dev/fd/1 -> /dev/pts/0
+$ ./unlink_dev_fd /dev/fd/1
+$ ll /dev/fd/1
+lrwx------ 1 lqs lqs 64 5月  25 17:27 /dev/fd/1 -> /dev/pts/0
