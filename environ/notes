@@ -1,0 +1,35 @@
+#include <stdlib.h>
+void exit(int status);
+void _Exit(int status);
+#include <unistd.h>
+void _exit(int status);
+#include <stdlib.h>
+int atexit(void (*func)(void));
+返回值：若成功，返回0；若出错，返回非0
+
+#include <stdlib.h>
+void *malloc(size_t size);
+void *calloc(size_t nobj, size_t size);
+void *realloc(void *ptr, size_t newsize);
+3个函数返回值：若成功，返回非空指针；若出错，返回NULL
+void free(void *ptr);
+
+#include <stdlib.h>
+char *getenv(const char *name);
+返回值：指向与name关联的value的指针；若未找到，返回NULL
+#include <stdlib.h>
+int putenv(char *str);
+函数返回值：若成功，返回0；若出错，返回非0
+int setenv(const char *name, const char *value, int rewrite);
+int unsetenv(const char *name);
+两个函数返回值：若成功，返回0；若出错，返回-1
+
+#include <setjmp.h>
+int setjmp(jmp_buf env);
+返回值：若直接调用，返回0；若从longjmp返回，则为非0
+void longjmp(jmp_buf env, int val);
+
+#include <sys/resource.h>
+int getrlimit(int resource, struct rlimit *rlptr);
+int setrlimit(int resource, const strudct rlimit *rlptr);
+两个函数返回值：若成功，返回0；若出错，返回非0
