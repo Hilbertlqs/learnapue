@@ -1,4 +1,4 @@
-DIRS = lib intro standards fileio filedir
+DIRS = lib intro datafiles standards stdio fileio filedir
 
 all:
 	for i in $(DIRS); do \

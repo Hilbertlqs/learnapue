@@ -1,0 +1,88 @@
+#include <pwd.h>
+struct passwd *getpwuid(uid_t uid);
+struct passwd *getpwnam(const char *name);
+两个函数返回值：若成功，返回指针；若出错，返回NULL
+#include <pwd.h>
+struct passwd *getpwent(void);
+返回值：若成功，返回指针；若出错或到达文件尾端，返回NULL
+void setpwent(void);
+void endpwent(void);
+
+#include <shadow.h>
+struct spwd *getspnam(const char *name);
+struct spwd *getspent(void);
+两个函数返回值：若成功，返回指针；若出错，返回NULL
+void setspent(void);
+void endspent(void);
+
+#include <grp.h>
+struct group *getgrgid(gid_t gid);
+struct group *getgrnam(const char *name);
+两个函数返回值：若成功，返回指针；若出错，返回NULL
+#include <grp.h>
+struct group *getgrent(void);
+返回值：若成功，返回指针；若出错或到达文件尾端，返回NULL
+void setgrent(void);
+void endgrent(void);
+
+#include <unistd.h>
+int getgroups(int gidsetsize, git_t grouplist[]);
+返回值：若成功，返回附属组ID数量；若出错，返回-1
+#include <grp.h> /* on Linux */
+#include <unistd.h> /* on FreeBSD, Mac OS X, and Solaris */
+int setgroups(int ngroups, const gid_t grouplist[]);
+#include <grp.h> /* on Linux and Solaris */
+#include <unistd.h> /* on FreeBSD and MacOS X */
+int initgroups(const char *username, gid_t basegid);
+两个函数的返回值：若成功，返回0；若出错，返回-1
+
+说明  数据文件        头文件      结构      附加的键搜索函数
+口令  /etc/passwd     <pwd.h>     passwd    getpwnam、getpwuid
+组    /etc/group      <grp.h>     group     getgrnam、getgrgid
+阴影  /etc/shadow     <shadow.h>  spwd      getspnam
+主机  /etc/hosts      <netdb.h>   hostent   getnameinfo、getaddrinfo
+网络  /etc/networks   <netdb.h>   netent    getnetbyname、getnetbyaddr
+协议  /etc/protocols  <netdb.h>   protoent  getprotobyname、getprotobynumber
+服务  /etc/services   <netdb.h>   servent   getservbyname、getservbyport
+
+#include <sys/utsname.h>
+int uname(struct utsname *name);
+返回值：若成功，返回非负值；若出错，返回-1
+#include <unistd.h>
+int gethostname(char *name, int namelen);
+返回值：若成功，返回0；若出错，返回-1
+
+#include <time.h>
+time_t time(time_t *calptr);
+返回值：若成功，返回时间值；若出错，返回-1
+标识符                    选项                    说明
+CLOCK_REALTIME                                    实时系统时间
+CLOCK_MONOTONIC           _POSIX_MONOTONIC_CLOCK  不带负跳数的实时系统时间
+CLOCK_PROCESS_CPUTIME_ID  _POSIX_CPUTIME          调用进程的CPU时间
+CLOCK_THREAD_CPUTIME_ID   _POSIX_THREAD_CPUTIME   调用线程的CPU时间
+#include <sys/time.h>
+int clock_gettime(clockid_t clock_id, struct timespec *tsp);
+返回值：若成功，返回0；若出错，返回-1
+#include <sys/time.h>
+int clock_getres(clockid_t clock_id, struct timespec *tsp);
+返回值：若成功，返回0；若出错，返回-1
+#include <sys/time.h>
+int clock_settime(clockid_t clock_id, const struct timespec *tsp);
+返回值：若成功，返回0；若出错，返回-1
+#include <sys/time.h>
+int gettimeofday(struct timeval *restrict tp, void *restrict tzp);
+返回值：总是返回0
+#include <time.h>
+struct tm *gmtime(const time_t *calptr);
+struct tm *localtime(const time_t *calptr);
+两个函数的返回值：指向分解的tm结构的指针；若出错，返回NULL
+#include <time.h>
+time_t mktime(struct tm *tmptr);
+返回值：若成功，返回日历时间；若出错，返回-1
+#include <time.h>
+size_t strftime(char *restrict buf, size_t maxsize, const char *restrict format, const struct tm *restrict tmptr);
+size_t strftime_l(char *restrict buf, size_t maxsize, const char *restrict format, const struct tm *restrict tmptr, locale_t locale);
+两个函数的返回值：若有空间，返回存入数组的字符数；否则，返回0
+#include <time.h>
+char *strptime(const char *restrict buf, const char *restrict format, struct tm *restrict tmptr);
+返回值：指向上次解析的字符的下一个字符的指针；否则，返回NULL

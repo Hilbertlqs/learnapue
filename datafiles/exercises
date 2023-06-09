@@ -1,0 +1,35 @@
+6.1
+在Linux 3.2.0和Solaris 10中，与访问口令文件的一组函数相类似，有另一组函数可用于访问阴影口令文件。
+#include <shadow.h>
+struct spwd *getspnam(const char *name);
+struct spwd *getspent(void);
+void setspent(void);
+void endspent(void);
+
+6.2
+在Linux 3.2.0和Solaris 10中，有超级用户权限，执行getspnam程序输出加密口令，有普通用户权限，执行getspnam将返回EACCES错误。
+
+6.3
+$ uname -a
+Linux lqs-virtual-machine 5.15.0-73-generic #80~20.04.1-Ubuntu SMP Wed May 17 14:58:14 UTC 2023 x86_64 x86_64 x86_64 GNU/Linux
+$ ./uname 
+sysname = Linux
+nodename = lqs-virtual-machine
+release = 5.15.0-73-generic
+version = #80~20.04.1-Ubuntu SMP Wed May 17 14:58:14 UTC 2023
+machine = x86_64
+
+6.4
+根据系统不同，time_t可能是int或者long int。如果是int，32位带符号整型数范围是-2147483648~2147483647，一年按365天计算，2147483647 / 60 / 60 / 24 / 365 ~= 68.096年，考虑闰年，也不会早于68年，1970 + 68 = 2038年。到2038年将达到上限，之后将会溢出，时间变成负值。
+
+6.5
+$ date
+2023年 06月 08日 星期四 10:08:08 CST
+$ ./strftime_date 
+Thu Jun 08 10:08:10 CST 2023
+$ TZ=US/Mountain ./strftime_date 
+Wed Jun 07 20:08:11 MDT 2023
+$ TZ=Japan ./strftime_date 
+Thu Jun 08 11:08:13 JST 2023
+$ TZ=China ./strftime_date 
+Thu Jun 08 02:08:15 China 2023
