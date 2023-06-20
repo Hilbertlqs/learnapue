@@ -1,0 +1,74 @@
+8.1
+_exit并不执行标准I/O缓冲区的冲洗操作。如果调用的是exit而不是_exit，则该程序的输出是不确定的。它依赖于标准I/O库的实现，我们可能会看到输出没有发生变化，或者发现没有出现父进程的printf输出。
+如果子进程调用exit，实现冲洗标准I/O流。如果这是采取的唯一动作，那么我们会见到这样操作的输出与子进程调用_exit所产生的输出完全相同，没有任何区别。如果该实现也关闭标准I/O流，那么表示标准输出FILE对象的相关存储区将被清0。因为子进程借用了父进程的地址空间，所以当父进程恢复运行并调用printf时，也就不会产生任何输出，printf返回-1。注意，父进程的STDOUT_FTLENO仍然有效，子进程得到的是父进程的文件描述符数组的副本。
+大多数exit的现代实现不再在流的关闭方面自找麻烦。因为进程即将终止，那时内核将关闭在进程中已打开的所有文件描述符。在库中关闭这些，只是增加了开销而不会带来任何益处。
+测试表明，直接将_exit替换为exit，所产生的输出完全相同，没有任何区别，原因是书上写的，exit的现代实现不再在流的关闭方面自找麻烦。
+为了仿真子进程终止时的关闭标准输出的行为，在调用exit之前加下列代码行：
+fclose(stdout);
+当父进程恢复运行并调用printf时，不会产生任何输出。
+为了观察其效果，用下面几行代替程序中调用printf的语句。
+i = printf("pid = %ld, glob = %d, var = %d\n", (long)getpid(), globvar, var);
+sprintf(buf, "%d\n", i);
+write(STDOUT_FILENO, buf, strlen(buf));
+还需要定义变量i和buf。
+这里假设子进程调用exit时关闭标准I/O流。但不关闭文件描述符STDOUT_FILENO。有些版本的标准I/O库会关闭与标准输出相关联的文件描述符从而引起write标准输出失败。在这种情况下，调用dup将标准输出复制到另一个描述符，write则使用新复制的文件描述符。
+测试表明，没有关闭文件描述符STDOUT_FILENO。
+
+8.2
+$ ./vfork_stack 
+Segmentation fault
+当函数f1调用vfork时，父进程的栈指针指向f1函数的栈帧，见图。
+栈的底部         --------------------
+                     main的栈帧     
+                --------------------
+                      f1的栈帧      
+栈扩展的方向 |    --------------------
+          \|/                       
+vfork使得子进程先执行然后从f1返回，接着子进程调用f2，并且f2的栈帧覆盖了f1的栈帧，在f2中子进程将自动变量buf的值置为0，即将栈中的1000个字节的值都置为0。从f2返回后子进程调用_exit，这时栈中main栈帧以下的内容已经被f2修改了。然后，父进程从vfork调用后恢复继续，并从f1返回。返回信息虽然常常保存在栈中，但是多半可能已经被子进程修改了。对于这个例子，父进程恢复继续执行的结果要依赖于你所使用的UNIX系统的实现特征(如返回信息保存在栈帧中的具体位置、修改动态变量时覆盖了哪些信息等)。通常的结果是一个core文件，但在你的系统中，产生的结果可能不同。
+
+8.3
+wait_waitid.c
+
+8.4
+暂未测到题中描述的问题。
+在tellwait2.c中，我们先让父进程输出，但是当父进程输出完毕子进程要输出时，要让父进程终止。是父进程先终止还是子进程先执行输出，要依赖于内核对两个进程的调度(另一个竞争条件)。在父进程终止后，shell会开始执行下一个程序，它也许会干扰子进程的输出。为了避免这种情况，要在子进程完成输出后才终止父进程。用下面的语句替换程序中fork后面的代码。
+tellwait_mod.c
+else if (pid == 0) {
+    WAIT_PARENT();
+    charatatime("output from child\n");
+    TELL_PARENT(getppid());
+} else {
+    charatatime("output from parent\n");
+    TELL_CHILD(pid);
+    WAIT_CHILD();
+}
+如果使子进程首先输出，还会发生此问题吗？
+tellwait_output.c
+由于只有终止父进程才能开始下一个程序，而该程序让子进程先运行，所以不会出现上面的情况。
+
+8.5
+对argv[2]打印的是相同的值(/home/sar/bin/testinterp)。原因是execlp在结束时调用了execve，并且与直接调用execl的路径名相同。
+execlp                        execl                   execle
+  | 建立argv                    | 建立argv              | 建立argv
+execvp -- 尝试每个PATH前缀 -- execv -- 使用environ -- execve(系统调用)
+                                                        | build path from /proc/self/fd alias
+                                                      fexecve
+库函数execlp和execvp使用PATH环境变量，查找第一个包含名为filename的可执行文件的路径名前缀。
+
+8.6
+zombie_ps.c
+$ ./zombie_ps 
+    PID    PPID S TT       COMMAND
+   3950    3623 S pts/0    /usr/bin/bash --init-file /usr/share/code/resources/app/out/vs/workbench/contrib/terminal/browser/media/shellIntegration-bash.sh
+  27492    3950 S pts/0    ./zombie_ps
+  27493   27492 Z pts/0    [zombie_ps] <defunct>
+  27518   27492 S pts/0    sh -c ps -o pid,ppid,state,tty,command
+  27519   27518 R pts/0    ps -o pid,ppid,state,tty,command
+
+8.7
+POSIX.1明确要求在exec时关闭打开目录流。这通常是由opendir函数实现的，它调用fcntl函数为对应于打开目录流的描述符设置执行时关闭标志。
+cloexec_parent.c, cloexec_child.c
+$ ./cloexec_parent 
+close-on-exec is on
+fcntl error: Bad file descriptor
+在子进程中执行fcntl函数失败，提示“fcntl error: Bad file descriptor”，说明对应于打开目录流的描述符设置了执行时关闭标志。

@@ -1,0 +1,8 @@
+9.1
+因为init是登录shell的父进程，当登录shell终止时它收到SIGCHLD信号，所以init进程知道什么时候终端用户注销。
+网络登录没有包含init，在utmp和wtmp文件中的登录项和相应的注销项是由一个处理登录并检测注销的进程写的(本例中为telnetd)。
+
+9.2
+session.c
+$ ./session 
+child: pid = 8016, ppid = 8015, pgrp = 8016, tpgrp = -1

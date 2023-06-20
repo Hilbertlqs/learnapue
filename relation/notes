@@ -1,0 +1,29 @@
+#include <unistd.h>
+pid_t getpgrp(void);
+返回值：调用进程的进程组ID
+#include <unistd.h>
+pid_t getpgid(pid_t pid);
+返回值：若成功，返回进程组ID；若出错，返回-1
+若pid是0，返回调用进程的进程组ID，于是，
+getpgid(0);
+等价于
+getpgrp();
+#include <unistd.h>
+int setpgid(pid_t pid, pid_t pgid);
+返回值：若成功，返回0；若出错，返回-1
+
+#include <unistd.h>
+pid_t setsid(void);
+返回值：若成功，返回进程组ID；若出错，返回-1
+#include <unistd.h>
+pid_t getsid(pid_t pid);
+返回值：若成功，返回会话首进程的进程组ID；若出错，返回-1
+
+#include <unistd.h>
+pid_t tcgetpgrp(int fd);
+返回值：若成功，返回前台进程组ID；若出错，返回-1
+pid_t tcsetpgrp(int fd, pid_t pgrpid);
+返回值：若成功，返回；若出错，返回-1
+#include <termios.h>
+pid_t tcgetsid(int fd);
+返回值：若成功，返回会话首进程的进程组ID；若出错，返回-1

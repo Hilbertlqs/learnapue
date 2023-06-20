@@ -1,4 +1,4 @@
-DIRS = lib intro datafiles environ standards stdio fileio filedir
+DIRS = lib intro datafiles environ fileio filedir proc relation standards stdio
 
 all:
 	for i in $(DIRS); do \
