@@ -19,7 +19,7 @@ endif
 
 OUTPUT_DIR = $(ROOT)/build/proc
 PROGS = echoall exec1 exec2 fork1 fork2 nice pruids tellwait1 tellwait2 test1 times1 vfork1 wait1 vfork_exit vfork_stack wait_waitid tellwait_mod tellwait_output zombie_ps cloexec_parent cloexec_child
-MOREPROGS = systest1 systest3
+MOREPROGS = $(OUTPUT_DIR)/systest1 $(OUTPUT_DIR)/systest3
 
 all: $(OUTPUT_DIR) $(PROGS) $(MOREPROGS) $(OUTPUT_DIR)/system.o $(ACCT)
 
