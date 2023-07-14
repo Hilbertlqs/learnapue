@@ -1,0 +1,88 @@
+#include <signal.h>
+void (*signal(int signo, void (*func)(int)))(int);
+返回值：若成功，返回以前的信号处理配置；若出错，返回SIG_ERR
+typedef void Sigfunc(int);
+Sigfunc *signal(int, Sigfunc *);
+#define SIG_ERR (void (*)())-1
+#define SIG_DFL (void (*)())0
+#define SIG_IGN (void (*)())1
+
+#include <signal.h>
+int kill(pid_t pid, int signo);
+int raise(int signo);
+两个函数返回值：若成功，返回0；若出错，返回-1
+调用
+raise(signo);
+等价于调用
+kill(getpid(), signo);
+#include <unistd.h>
+unsigned int alarm(unsigned int seconds);
+返回值：0或以前设置的闹钟时间的余留秒数
+#include <unistd.h>
+int pause(void);
+返回值：-1，errno设置为EINTR
+
+#include <signal.h>
+int sigemptyset(sigset_t *set);
+int sigfillset(sigset_t *set);
+int sigaddset(sigset_t *set, int signo);
+int sigdelset(sigset_t *set, int signo);
+4个函数返回值：若成功，返回0；若出错，返回-1
+int sigismember(const sigset_t *set, int signo);
+返回值：若真，返回1；若假，返回0
+
+#include <signal.h>
+int sigprocmask(int how, const sigset_t *restrict set, sigset_t *restrict oset);
+返回值：若成功，返回0；若出错，返回-1
+
+#include <signal.h>
+int sigpending(sigset_t *set);
+返回值：若成功，返回0；若出错，返回-1
+
+#include <signal.h>
+int sigaction(int signo, const struct sigaction *restrict act, struct sigaction *restrict oact);
+返回值：若成功，返回0；若出错，返回-1
+
+#include <setjmp.h>
+int sigsetjmp(sigjmp_buf env, int savemask);
+返回值：若直接调用，返回0；若从siglongjmp返回，则返回非0
+void siglongjmp(sigjmp_buf env, int val);
+
+#include <signal.h>
+int sigsuspend(const sigset_t *sigmask);
+返回值：-1，并将errno设置为EINTR
+
+#include <stdlib.h>
+void abort(void);
+此函数不返回值
+
+#include <unistd.h>
+unsigned int sleep(unsigned int seconds);
+返回值：0或未休眠完的秒数
+#include <time.h>
+int nanosleep(const struct timespec *reqtp, struct timespec *remtp);
+返回值：若休眠到要求的时间，返回0；若出错，返回-1
+#include <time.h>
+int clock_nanosleep(clockid_t clokc_id, int flags, const struct timespec *reqtp, struct timespec *remtp);
+返回值：若休眠要求的时间，返回0；若出错，返回错误码
+注意，除了出错返回，调用
+clock_nanosleep(CLOCK_REALTIME, 0, reqtp, remtp);
+和调用
+nanosleep(reqtp, remtp);
+的效果是相同的。
+
+#include <signal.h>
+int sigqueue(pid_t pid, int signo, const union sigval value);
+返回值：若成功，返回0；若出错，返回-1
+
+#include <signal.h>
+void psignal(int signo, const char *msg);
+#include <signal.h>
+void psiginfo(const siginfo_t *info, const char *msg);
+#include <string.h>
+char *strsignal(int signo);
+返回值：指向描述该信号的字符串的指针
+#include <signal.h>
+int sig2str(int signo, char *str);
+int str2sig(const char *str, int *signop);
+两个函数的返回值：若成功，返回0；若出错，返回-1

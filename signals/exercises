@@ -1,0 +1,55 @@
+10.1
+pause函数使调用进程挂起直至捕捉到一个信号。
+当程序第一次接收到发送给它的信号时就终止了。因为一捕捉到信号，pause函数就返回。
+
+10.2
+sig2str.c
+
+10.3
+        SIGINT        SIGALRM              longjmp
+  main  main          main                 main <--| return main
+        sleep2        sleep2 <--|          sleep2 -|
+        sig_int       sig_int   | longjmp
+                      sig_alrm -|
+在sig_alrm中通过longjmp返回sleep2，有效地避免了继续执行sig_int。从这一点，sleep2返回main。
+
+10.4
+在第一次调用alarm和setjmp之间又有一次竞争条件。如果进程在调用alarm和setjmp之间被内核阻塞了，闹钟时间超过后就调用信号处理程序，然后调用longjmp。但是由于没有调用过setjmp，所以没有设置env_alrm缓冲区。如果longjmp的跳转缓冲区没有被setjmp初始化，则说明longjmp的操作是未定义的。
+
+10.5
+参见Don Libes的论文“Implementing Software Timers”(C users Journal, Vol. 8, no. 11, Nov. 1990)中的例子。可以访问http://www.kohala.com/start/libes.timers.txt 获得该论文的电子版。
+
+10.6
+test_sig_sync.c
+https://blog.csdn.net/qq_35667743/article/details/130348459
+https://github.com/MeiK2333/apue
+
+10.7
+如果仅仅调用_exit，则进程终止状态不能表示该进程是由于SIGABRT信号而终止的。
+
+10.8
+如果信号是由其他用户的进程发出的，进程必须设置用户ID为根或者是接收进程的所有者，否则kill不能执行。所以实际用户ID为信号的接收者提供了更多的信息。
+
+10.9
+prmask_all.c
+
+10.10
+test_sleep.c
+对于本书作者所用的一个系统，每60~90分钟增加一秒，这个误差是因为每次调用sleep都要调度一次将来的时间事件，但是由于CPU调度，有时并没有在事件发生时立即被唤醒。另外一个原因是进程开始运行和再次调用sleep都需要一定量的时间。
+cron守护进程这样的程序每分钟都要获取当前时间，它首先设置一个休眠周期，然后在下一分钟开始时唤醒。(将当前时间转换成本地时间并查看tm_sec值。)每一分钟，设置下一个休眠周期，使得在下一分钟开始时可以唤醒。大多数调用是sleep(60)，偶尔有一个sleep(59)用于在下一分钟同步。但是，若在进程中花费了许多时间执行命令或者系统的负载重、调度慢，这时休眠值可能远小于60。
+
+10.11
+mycat_mod.c
+没有调用SIGXFSZ的信号处理程序。
+文件的大小达到1024字节时，write没有返回24，与答案不同。
+如何测试“在当前文件偏移量处(文件尾端)尝试再一次write”。
+在Linux 3.2.0、Mac OS X 10.6.8和Solaris 10中，从来没有调用过SIGXFSZ的信号处理程序，一旦文件的大小达到1024时，write就返回24。
+在FreeBSD 8.0中，当文件大小已达到1000字节，在下一次准备写100字节时调用该信号处理程序，write返回-1，并且将errno设置为EFBIG(文件太大)。
+在所有4种平台上，如果在当前文件偏移量处(文件尾端)尝试再一次write，将收到SIGXFSZ信号，write将失败，返回-1，并将errno设置为EFBIG。
+
+10.12
+test_fwrite.c
+Segmentation fault (core dumped)
+结果依赖于标准I/O库的实现：fwrite函数如何处理一个被中断的write。
+例如，在Linux 3.2.0上，当使用fwrite函数写一个大的缓冲区时，fwrite以相同的字节数直接调用write。在write系统调用当中，闹钟时间到，但我们直到写结束才看到信号。看上去就好像在write系统调用进行当中内核阻塞了信号。
+与此不同的是，在Solaris 10中，fwrite函数调用以8KB的增量调用write，直到写完整个要求的字节数。当闹钟时间到，会被捕捉到，中断write回到fwrite。当从信号处理程序返回时，返回到fwrite函数内部的循环，并继续以8KB的增量写。
