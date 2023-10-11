@@ -1,4 +1,4 @@
-DIRS = lib intro datafiles environ fileio filedir proc relation signals standards stdio threads
+DIRS = lib intro datafiles environ fileio filedir proc relation signals standards stdio threadctl threads
 
 all:
 	for i in $(DIRS); do \
