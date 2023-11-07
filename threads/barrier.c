@@ -85,9 +85,9 @@ int main(int argc, char *argv[])
     merge();
     gettimeofday(&end, NULL);
 
-    startusec = start.tv_sec * 100000 + start.tv_usec;
+    startusec = start.tv_sec * 1000000 + start.tv_usec;
     endusec = end.tv_sec * 1000000 + end.tv_usec;
-    elapsed = (double)(endusec - startusec) / 100000.0;
+    elapsed = (double)(endusec - startusec) / 1000000.0;
     printf("sort took %.4f seconds\n", elapsed);
     for (i = 0; i < NUMNUM; i++)
         printf("%ld\n", snums[i]);
