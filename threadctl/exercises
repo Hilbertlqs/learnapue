@@ -1,0 +1,58 @@
+12.1
+lqs@lqs-virtual-machine:~/apue3e/learnapue/build/threadctl$ ./atfork 
+thread started...
+parent about to fork...
+preparing locks...
+parent unlocking locks...
+parent returned from fork
+child unlocking locks...
+child returned from fork
+lqs@lqs-virtual-machine:~/apue3e/learnapue/build/threadctl$ ./atfork > atfork_output
+lqs@lqs-virtual-machine:~/apue3e/learnapue/build/threadctl$ cat atfork_output 
+thread started...
+parent about to fork...
+preparing locks...
+parent unlocking locks...
+parent returned from fork
+thread started...
+parent about to fork...
+preparing locks...
+child unlocking locks...
+child returned from fork
+
+就像人们首先会猜到的，这并不是一个多线程问题。这些标准I/O例程事实上是线程安全的。我们调用fork时，每个进程获了标准I/O数据的一份副本。程序运行时把标准输出定向到终端时，输出是行缓冲的，所以每次打印一行时，标准I/O库就把该行写到终端上。但是，如果把标准输出重定向到文件的话，则标准输出就是全缓冲的。当缓冲区满或者进程关闭流时，输出才会写到文件。在这个例子中，执行fork时，缓冲区中包含了还未写的几个打印行，所以当父进程和子进程最终冲洗缓冲区中的副本时，最初的复制内容就会入文件。
+
+在 IO 章节中提到，在输出到控制台时，标准输出为行缓存的，也就是说每一行输出都会冲洗缓冲区；而输出到文件时，标准输出为全缓冲，因此，在 fork 子进程的时候，缓冲区还没有被冲洗，因此子进程也带有父进程的缓冲区中尚未输出的部分。
+https://github.com/MeiK2333/apue
+
+这是一个行缓冲和全缓冲的问题
+标准输出定向到终端时，是行缓冲，每次打印一行。
+标准输出定向到文件时，是全缓冲，fork的时候，复制了缓冲区内容，故而有此结果(当缓冲区满或关闭文件的日候，冲洗缓冲区)
+https://blog.csdn.net/i_scream_/article/details/52972695
+
+12.2
+putenv_r.c
+https://blog.csdn.net/CurryXu/article/details/78144506
+
+12.3
+理论上来讲，如果在信号处理程序运行时阻塞所有的信号，那么就能使函数成为异步信号安全的。问题是我们并不能知道调用的某个函数可能并没有屏蔽已经被阻塞的信号，这样通过另一个信号处理程序可能会使该函数变成可重入的。
+
+12.4
+
+
+12.5
+如果希望在一个程序中运行另一个程序，还需要fork(即在调用exec之前)。
+
+可能需要在程序中运行另一个程序 (exec)
+可能单个进程受到某些限制 (如默认单进程最多能打开1024个文件)
+https://blog.csdn.net/i_scream_/article/details/52972695
+
+12.6
+使用select实现线程安全的sleep函数，延迟一定数量的时间。它是线程安全的，因为它并不使用任何未经保护的全局或静态数据，并且只调用其他线程安全的函数。
+sleep.c
+
+12.7
+很多时候条件变量的实现都使用互斥锁来保护它的内部结构。由于这是实现细节，因而通常是被隐藏起来的，所以在fork处理程序中没有可移植的方法获取或释放锁。既然在调用fork后并不能确定条件变量中的内部锁状态，所以在子进程中使用条件变量是不安全的。
+
+12.8
+
