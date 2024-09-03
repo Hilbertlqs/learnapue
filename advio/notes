@@ -1,0 +1,44 @@
+#include <fcntl.h>
+int fcntl(int fd, int cmd, .../* struct flock *flockptr */);
+返回值：若成功，依赖于cmd(见下)，否则，返回-1
+对于记录锁，cmd是F_GETLK、F_SETLK或F_SETLKW。
+
+#include <sys/select.h>
+int select(int maxfdp1, fd_set *restrict readfds, fd_set *restrict writefds, fd_set *restrict exceptfds, struct timeval *restrict tvptr);
+返回值：准备就绪的描述符数目；若超时，返回0；若出错，返回-1
+#include <sys/select.h>
+int FD_ISSET(int fd, fd_set *fdset);
+返回值：若fd在描述符集中，返回非0值；否则，返回0
+void FD_CLR(int fd, fd_set *fdset);
+void FD_SET(int fd, fd_set *fdset);
+void FD_ZERO(fd_set *fdset);
+#include <sys/select.h>
+int pselect(int maxfdp1, fd_set *restrict readfds, fd_set *restrict writefds, fd_set *restrict exceptfds, const struct timespec *restrict tsptr, const sigset_t *restrict sigmask);
+返回值：准备就绪的描述符数目；若超时，返回0；若出错，返回-1
+#include <poll.h>
+int poll(struct pollfd fdarray[], nfds_t nfds, int timeout);
+返回值：准备就绪的描述符数目；若超时，返回0；若出错，返回-1
+
+#inlcude <aio.h>
+int aio_read(struct aiocb *aiocb);
+int aio_write(struct aiocb *aiocb);
+两个函数的返回值：若成功，返回0；若出错，返回-1
+#include <aio.h>
+int aio_fsync(int op, struct aiocb *aiocb);
+返回值：若成功，返回0；若出错，返回-1
+#include <aio.h>
+int aio_error(connst struct aiocb *aiocb);
+返回值：(见下)
+返回值为下面4种情况中的一种。
+0            异步操作成功完成。需要调用aio_return函数获取操作返回值。
+-1           对aio_error的调用失败。这种情况下，errno会告诉我们为什么。
+EINPROGRESS  异步读、写或同步操作仍在等待。
+其他情况      其他任何返回值是相关的异步操作失败返回的错误码。
+#include <aio.h>
+ssize_t aio_return(const struct aiocb *aiocb);
+返回值：(见下)
+直到异步操作完成之前，都需要小心不要调用aio_return函数。操作完成之前的结果是未定义的。还需要小心对每个异步操作只调用一次aio_return。一旦调用了该函数，操作系统就可以释放掉包含了I/O操作返回值的记录。
+如果aio_return函数本身失败，会返回-1，并设置errno。其他情况下，它将返回异步操作的结果，即会返回read、write或者fsync在被成功调用时可能返回的结果。
+#include <aio.h>
+int aio_suspend(const struct aiocb *const list[], int nent, const struct timespec *timeout);
+返回值：若成功，返回0；若出错，返回-1
